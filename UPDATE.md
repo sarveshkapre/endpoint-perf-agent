@@ -3,6 +3,7 @@
 ## Shipped
 - Added machine-readable analysis output: `epagent analyze --format json`.
 - Added report-to-stdout: `epagent report --out -`.
+- Added per-metric baseline stats (mean/stddev/min/max) to analysis outputs (Markdown + JSON).
 - Made analysis/reporting more robust:
   - Sorts samples by timestamp before analyzing.
   - Skips blank lines and supports larger JSONL lines.

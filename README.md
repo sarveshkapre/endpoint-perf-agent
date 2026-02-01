@@ -11,7 +11,7 @@ Cross-platform endpoint performance agent that samples CPU/memory/disk/network m
 - CPU, memory, disk, and network sampling (cross-platform via gopsutil).
 - Rolling z-score anomaly detection with severity levels.
 - JSONL storage for easy ingestion.
-- Markdown report generation with explanations.
+- Markdown report generation with explanations + baseline summaries.
 
 ## Quickstart
 ```bash
@@ -45,7 +45,7 @@ Create a JSON config and pass it to `collect` with `--config`.
 ```bash
 epagent collect --once
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
-epagent analyze --in data/metrics.jsonl --format json
+epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10
 epagent report --out endpoint-perf-report.md
 epagent report --min-severity medium --top 20 --out -

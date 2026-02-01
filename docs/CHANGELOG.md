@@ -5,5 +5,6 @@
 - Added CLI commands and JSONL storage.
 - `analyze --format json` for machine-readable output.
 - `report --out -` to write Markdown to stdout.
+- Baseline summaries (mean/stddev/min/max) in Markdown report and JSON output.
 - Robust sample handling (timestamp sorting, tolerate blank lines) and clearer explanations.
 - `--min-severity` and `--top` filtering for `analyze` and `report`.
