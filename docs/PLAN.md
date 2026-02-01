@@ -20,7 +20,12 @@ Ship a local-first endpoint performance agent that samples host metrics, detects
 - [x] JSONL storage
 - [x] Rolling anomaly detection + severity
 - [x] CLI: collect/analyze/report
+- [x] Analyze output format: JSON (`analyze --format json`)
 - [x] Markdown report
+- [x] Report to stdout (`report --out -`)
+- [x] Sort samples by timestamp; tolerate blank lines in JSONL
+- [x] Direction-aware anomaly explanations
+- [x] Filter + limit anomalies (`--min-severity`, `--top`)
 - [x] Unit tests for detector
 - [x] CI with lint/test/build + security scans
 
@@ -32,3 +37,7 @@ Ship a local-first endpoint performance agent that samples host metrics, detects
 - Per-process attribution for top offenders
 - Optional SQLite storage
 - Configurable alert rules (percentile, static thresholds)
+
+## Shipped
+- 2026-02-01: `analyze --format json`, `report --out -`, more robust sample handling + clearer explanations.
+- 2026-02-01: `--min-severity` + `--top` filters for `analyze`/`report`.

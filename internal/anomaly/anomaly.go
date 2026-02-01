@@ -96,22 +96,53 @@ func meanStddev(values []float64) (float64, float64) {
 }
 
 func explain(name string, value, mean, z float64) string {
+	sigma := math.Abs(z)
+	trendUp := z >= 0
+
 	switch name {
 	case "cpu_percent":
-		return fmt.Sprintf("CPU usage spiked to %.1f%% (baseline %.1f%%, %.1fσ). Check for runaway processes or batch workloads.", value, mean, z)
+		verb := "spiked"
+		if !trendUp {
+			verb = "dropped"
+		}
+		return fmt.Sprintf("CPU usage %s to %.1f%% (baseline %.1f%%, %.1fσ). Check for runaway processes, background jobs, or throttling.", verb, value, mean, sigma)
 	case "mem_used_percent":
-		return fmt.Sprintf("Memory usage hit %.1f%% (baseline %.1f%%, %.1fσ). Look for leaks, large caches, or memory pressure.", value, mean, z)
+		verb := "rose"
+		if !trendUp {
+			verb = "fell"
+		}
+		return fmt.Sprintf("Memory usage %s to %.1f%% (baseline %.1f%%, %.1fσ). Look for leaks, large caches, or memory pressure.", verb, value, mean, sigma)
 	case "disk_used_percent":
-		return fmt.Sprintf("Disk usage rose to %.1f%% (baseline %.1f%%, %.1fσ). Investigate large writes, logs, or unexpected data growth.", value, mean, z)
+		verb := "rose"
+		if !trendUp {
+			verb = "fell"
+		}
+		return fmt.Sprintf("Disk usage %s to %.1f%% (baseline %.1f%%, %.1fσ). Investigate large writes, logs, or unexpected data growth.", verb, value, mean, sigma)
 	case "disk_read_bytes_per_sec":
-		return fmt.Sprintf("Disk read throughput jumped to %.0f B/s (baseline %.0f B/s, %.1fσ). Possible causes: heavy scans or backups.", value, mean, z)
+		verb := "jumped"
+		if !trendUp {
+			verb = "dropped"
+		}
+		return fmt.Sprintf("Disk read throughput %s to %.0f B/s (baseline %.0f B/s, %.1fσ). Possible causes: scans, backups, or stalled I/O.", verb, value, mean, sigma)
 	case "disk_write_bytes_per_sec":
-		return fmt.Sprintf("Disk write throughput jumped to %.0f B/s (baseline %.0f B/s, %.1fσ). Check for log storms or sync jobs.", value, mean, z)
+		verb := "jumped"
+		if !trendUp {
+			verb = "dropped"
+		}
+		return fmt.Sprintf("Disk write throughput %s to %.0f B/s (baseline %.0f B/s, %.1fσ). Check for log storms, sync jobs, or blocked writes.", verb, value, mean, sigma)
 	case "net_rx_bytes_per_sec":
-		return fmt.Sprintf("Inbound network spiked to %.0f B/s (baseline %.0f B/s, %.1fσ). Verify unexpected downloads or large transfers.", value, mean, z)
+		verb := "spiked"
+		if !trendUp {
+			verb = "dropped"
+		}
+		return fmt.Sprintf("Inbound network %s to %.0f B/s (baseline %.0f B/s, %.1fσ). Verify unexpected downloads or large transfers.", verb, value, mean, sigma)
 	case "net_tx_bytes_per_sec":
-		return fmt.Sprintf("Outbound network spiked to %.0f B/s (baseline %.0f B/s, %.1fσ). Look for uploads, backups, or exfil signals.", value, mean, z)
+		verb := "spiked"
+		if !trendUp {
+			verb = "dropped"
+		}
+		return fmt.Sprintf("Outbound network %s to %.0f B/s (baseline %.0f B/s, %.1fσ). Look for uploads, backups, or exfil signals.", verb, value, mean, sigma)
 	default:
-		return fmt.Sprintf("Metric %s deviated from baseline (%.1fσ).", name, z)
+		return fmt.Sprintf("Metric %s deviated from baseline (%.1fσ).", name, sigma)
 	}
 }

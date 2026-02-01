@@ -45,7 +45,11 @@ Create a JSON config and pass it to `collect` with `--config`.
 ```bash
 epagent collect --once
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
+epagent analyze --in data/metrics.jsonl --format json
+epagent analyze --in data/metrics.jsonl --min-severity high --top 10
 epagent report --out endpoint-perf-report.md
+epagent report --min-severity medium --top 20 --out -
+epagent report --out -
 ```
 
 ## Docker

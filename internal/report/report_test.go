@@ -42,3 +42,22 @@ func TestAnalyzeDetectsSpike(t *testing.T) {
 		t.Fatal("expected anomaly")
 	}
 }
+
+func TestAnalyzeSortsSamplesByTimestamp(t *testing.T) {
+	t0 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	samples := []collector.MetricSample{
+		{Timestamp: t0.Add(10 * time.Second), CPUPercent: 10},
+		{Timestamp: t0, CPUPercent: 10},
+	}
+
+	result := Analyze(samples, 5, 3.0)
+	if result.Duration <= 0 {
+		t.Fatalf("expected positive duration, got %s", result.Duration)
+	}
+	if !result.FirstTimestamp.Equal(t0) {
+		t.Fatalf("expected first timestamp %s, got %s", t0, result.FirstTimestamp)
+	}
+	if !result.LastTimestamp.Equal(t0.Add(10 * time.Second)) {
+		t.Fatalf("expected last timestamp %s, got %s", t0.Add(10*time.Second), result.LastTimestamp)
+	}
+}

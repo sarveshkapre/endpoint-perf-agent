@@ -61,8 +61,8 @@ Usage:
 
 Commands:
   collect   Sample endpoint metrics and write JSONL to disk.
-  analyze   Detect anomalies from collected samples.
-  report    Generate a Markdown report with explanations.
+  analyze   Detect anomalies from collected samples (text or JSON output).
+  report    Generate a Markdown report with explanations (use --out - for stdout).
   version   Print the agent version.
 
 Run "epagent <command> -h" for command-specific flags.`)
@@ -162,6 +162,9 @@ func runAnalyze(args []string) error {
 	in := fs.String("in", "", "Input JSONL path")
 	window := fs.Int("window", 0, "Rolling window size override")
 	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
+	format := fs.String("format", "text", "Output format: text|json")
+	minSeverity := fs.String("min-severity", "low", "Minimum severity: low|medium|high|critical")
+	top := fs.Int("top", 0, "Limit to top N anomalies by absolute z-score (0 = no limit)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -191,8 +194,24 @@ func runAnalyze(args []string) error {
 	}
 
 	result := report.Analyze(samples, cfg.WindowSize, cfg.ZScoreThreshold)
-	fmt.Println(report.FormatSummary(result))
-	return nil
+	result, err = report.ApplyFilters(result, *minSeverity, *top)
+	if err != nil {
+		return err
+	}
+	switch *format {
+	case "text":
+		fmt.Println(report.FormatSummary(result))
+		return nil
+	case "json":
+		payload, err := report.FormatJSON(result)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(payload))
+		return nil
+	default:
+		return fmt.Errorf("unknown format: %s (expected text|json)", *format)
+	}
 }
 
 func runReport(args []string) error {
@@ -202,6 +221,8 @@ func runReport(args []string) error {
 	out := fs.String("out", "endpoint-perf-report.md", "Output markdown path")
 	window := fs.Int("window", 0, "Rolling window size override")
 	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
+	minSeverity := fs.String("min-severity", "low", "Minimum severity: low|medium|high|critical")
+	top := fs.Int("top", 0, "Limit to top N anomalies by absolute z-score (0 = no limit)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -231,7 +252,15 @@ func runReport(args []string) error {
 	}
 
 	result := report.Analyze(samples, cfg.WindowSize, cfg.ZScoreThreshold)
+	result, err = report.ApplyFilters(result, *minSeverity, *top)
+	if err != nil {
+		return err
+	}
 	md := report.FormatMarkdown(result)
+	if *out == "-" {
+		fmt.Print(md)
+		return nil
+	}
 	if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {
 		return err
 	}

@@ -1,6 +1,9 @@
 package anomaly
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDetectorFlagsAnomaly(t *testing.T) {
 	detector := NewDetector(5, 2.5)
@@ -24,5 +27,20 @@ func TestDetectorIgnoresNormal(t *testing.T) {
 		if detector.Check("mem_used_percent", v) != nil {
 			t.Fatal("did not expect anomaly")
 		}
+	}
+}
+
+func TestDetectorExplainsDirectionForDrops(t *testing.T) {
+	detector := NewDetector(5, 2.5)
+	values := []float64{10, 11, 9, 10, 12, 0}
+	var flagged *Anomaly
+	for _, v := range values {
+		flagged = detector.Check("cpu_percent", v)
+	}
+	if flagged == nil {
+		t.Fatal("expected anomaly to be flagged")
+	}
+	if !strings.Contains(flagged.Explanation, "dropped") {
+		t.Fatalf("expected explanation to mention a drop, got: %q", flagged.Explanation)
 	}
 }
