@@ -7,12 +7,6 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P0 (Selected) Stream mode: add `epagent watch` to continuously sample and emit anomalies as alerts (stdout NDJSON, optional syslog), with per-metric cooldown/dedupe.
-  Score: impact high | effort medium | strategic fit high | differentiation medium | risk low | confidence high
-- [ ] P0 (Selected) Overhead controls: add config + CLI flags to disable process attribution (top CPU/mem process scan) for process-dense hosts.
-  Score: impact high | effort low | strategic fit high | differentiation low | risk low | confidence high
-- [ ] P1 (Selected) CLI integration tests: add command-level tests for flag validation + a minimal end-to-end CLI smoke (collect/analyze/report/watch) using temp files.
-  Score: impact medium | effort medium | strategic fit high | differentiation low | risk low | confidence medium
 - [ ] P1 Add alert output sinks (structured JSON stream and syslog) for offline analysis results (`analyze`/`report`) as well as `watch`.
   Score: impact high | effort medium | strategic fit high | differentiation medium | risk medium | confidence medium
 - [ ] P1 Add configurable static and percentile-based alert rules (in addition to z-score), selectable per metric.
@@ -25,6 +19,14 @@
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
 ## Implemented
+- [x] 2026-02-09: Added `AGENTS.md` operating contract to the repository root and updated the clone tracker with bounded market scan notes.
+  Evidence: `AGENTS.md`, `CLONE_FEATURES.md`.
+- [x] 2026-02-09: Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
+  Evidence: `internal/config/config.go`, `internal/collector/collector.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
+- [x] 2026-02-09: Added `watch` command to stream anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown and optional JSONL sample output.
+  Evidence: `cmd/epagent/main.go`, `internal/watch/engine.go`, `internal/watch/run.go`, `internal/alert/alert.go`, `internal/alert/syslog_unix.go`, `internal/alert/syslog_windows.go`.
+- [x] 2026-02-09: Added command-level CLI tests for validation and basic flows (analyze/report/watch) without requiring host metrics.
+  Evidence: `cmd/epagent/main_test.go`, `internal/watch/engine_test.go`.
 - [x] 2026-02-09: Added per-sample process attribution (`top_cpu_process`, `top_mem_process`) in collector output.
   Evidence: `internal/collector/collector.go`, smoke JSONL sample from `epagent collect --once`.
 - [x] 2026-02-09: Added anomaly context enrichment (timestamp + top CPU/memory process) in analysis/report output paths.

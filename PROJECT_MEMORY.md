@@ -28,3 +28,40 @@
 - Trust label: verified-local
 - Follow-ups:
   - Add command-level tests for CLI flag validation paths.
+
+### 2026-02-09 - Add repository AGENTS contract and keep tracker current
+- Decision: Track the autonomous operating contract in-repo as `AGENTS.md`, and keep the clone task tracker current (including bounded market scan notes with links).
+- Why: The maintainer loop needs a stable, auditable contract and an always-current backlog that stays aligned with shipped behavior.
+- Evidence:
+  - Docs: `AGENTS.md`, `CLONE_FEATURES.md`
+- Commit: `e7e40f0`
+- Confidence: high
+- Trust label: verified-local
+
+### 2026-02-09 - Add process attribution overhead control
+- Decision: Add config `process_attribution` (default true) and `collect --process-attribution=false` to disable per-sample process scans on process-dense hosts.
+- Why: Scanning all processes each interval can be expensive; production use needs a knob to trade triage context for overhead.
+- Evidence:
+  - Code: `internal/config/config.go`, `internal/collector/collector.go`, `cmd/epagent/main.go`
+  - Docs: `README.md`, `docs/CHANGELOG.md`
+- Commit: `4e4b618`
+- Confidence: high
+- Trust label: verified-local
+
+### 2026-02-09 - Add streaming watch mode + alert sinks
+- Decision: Add `epagent watch` to continuously sample and emit anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown and optional JSONL sample output.
+- Why: File-based collection + offline analysis is useful, but streaming alerts materially improves time-to-detection and fits common ops workflows (pipe/ship, syslog).
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/watch/engine.go`, `internal/watch/run.go`, `internal/alert/alert.go`
+  - Tests: `cmd/epagent/main_test.go`, `internal/watch/engine_test.go`
+  - Local smoke: `./bin/epagent watch --duration 5s --interval 1s --sink stdout --min-severity medium --process-attribution=false --out tmp/watch-metrics.jsonl`
+- Commit: `6f808b0`
+- Confidence: high
+- Trust label: verified-local
+
+## Verification Evidence
+- `make check` (pass)
+- `./bin/epagent collect --once --out tmp/smoke-metrics.jsonl --process-attribution=false` (pass)
+- `./bin/epagent analyze --in tmp/smoke-metrics.jsonl --format json --window 5 --threshold 3 --min-severity low` (pass)
+- `./bin/epagent report --in tmp/smoke-metrics.jsonl --out tmp/report.md --min-severity low` (pass)
+- `./bin/epagent watch --duration 5s --interval 1s --min-severity medium --sink stdout --process-attribution=false --out tmp/watch-metrics.jsonl` (pass; 0 alerts emitted in that run)
