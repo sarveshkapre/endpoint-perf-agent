@@ -47,6 +47,8 @@
 - Commit: `4e4b618`
 - Confidence: high
 - Trust label: verified-local
+ - Follow-up shipped (same day): updated CLI parsing so config defaults are respected unless explicitly overridden by flags (fixes bool-flag default overriding config).
+   Commit: `2b0b2f4`
 
 ### 2026-02-09 - Add streaming watch mode + alert sinks
 - Decision: Add `epagent watch` to continuously sample and emit anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown and optional JSONL sample output.
@@ -66,3 +68,5 @@
 - `./bin/epagent report --in tmp/smoke-metrics.jsonl --out tmp/report.md --min-severity low` (pass)
 - `./bin/epagent watch --duration 5s --interval 1s --min-severity medium --sink stdout --process-attribution=false --out tmp/watch-metrics.jsonl` (pass; 0 alerts emitted in that run)
 - `gh run list -L 5` (pass; latest `ci`, `secret-scan`, `codeql` runs succeeded for `main` push)
+- `./bin/epagent collect --once --out tmp/smoke2.jsonl --process-attribution=false` (pass)
+- `./bin/epagent watch --duration 2s --interval 1s --process-attribution=false --out tmp/watch2.jsonl --sink stdout --min-severity critical` (pass; 0 alerts emitted in that run)
