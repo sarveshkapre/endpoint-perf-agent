@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 )
@@ -16,9 +17,13 @@ func ApplyFilters(result AnalysisResult, minSeverity string, top int) (AnalysisR
 	if minSeverity == "" {
 		minSeverity = "low"
 	}
+	minSeverity = strings.ToLower(strings.TrimSpace(minSeverity))
 	minRank, ok := severityRank(minSeverity)
 	if !ok {
 		return AnalysisResult{}, fmt.Errorf("unknown severity: %s (expected low|medium|high|critical)", minSeverity)
+	}
+	if top < 0 {
+		return AnalysisResult{}, fmt.Errorf("top must be greater than or equal to zero")
 	}
 
 	filtered := make([]anomaly.Anomaly, 0, len(out.Anomalies))

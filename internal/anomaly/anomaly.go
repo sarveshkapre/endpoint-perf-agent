@@ -3,16 +3,27 @@ package anomaly
 import (
 	"fmt"
 	"math"
+	"time"
 )
 
+type ProcessAttribution struct {
+	PID        int32   `json:"pid"`
+	Name       string  `json:"name"`
+	CPUPercent float64 `json:"cpu_percent"`
+	RSSBytes   uint64  `json:"rss_bytes"`
+}
+
 type Anomaly struct {
-	Name        string
-	Value       float64
-	Mean        float64
-	Stddev      float64
-	ZScore      float64
-	Severity    string
-	Explanation string
+	Name          string
+	Timestamp     time.Time `json:"timestamp,omitempty"`
+	Value         float64
+	Mean          float64
+	Stddev        float64
+	ZScore        float64
+	Severity      string
+	Explanation   string
+	TopCPUProcess *ProcessAttribution `json:"top_cpu_process,omitempty"`
+	TopMemProcess *ProcessAttribution `json:"top_mem_process,omitempty"`
 }
 
 type Detector struct {

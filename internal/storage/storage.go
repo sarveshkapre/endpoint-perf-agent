@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
@@ -53,14 +54,16 @@ func ReadSamples(path string) ([]collector.MetricSample, error) {
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	samples := make([]collector.MetricSample, 0)
+	lineNo := 0
 	for scanner.Scan() {
+		lineNo++
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
 		}
 		var sample collector.MetricSample
 		if err := json.Unmarshal(line, &sample); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid jsonl at line %d: %w", lineNo, err)
 		}
 		samples = append(samples, sample)
 	}

@@ -12,6 +12,11 @@ import (
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
 
+const (
+	minWindowSize    = 5
+	defaultThreshold = 3.0
+)
+
 type MetricStats struct {
 	Count  int     `json:"count"`
 	Mean   float64 `json:"mean"`
@@ -34,6 +39,7 @@ type AnalysisResult struct {
 }
 
 func Analyze(samples []collector.MetricSample, windowSize int, threshold float64) AnalysisResult {
+	windowSize, threshold = NormalizeParams(windowSize, threshold)
 	result := AnalysisResult{
 		Samples:         len(samples),
 		WindowSize:      windowSize,
@@ -83,6 +89,9 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 		for name, value := range metrics {
 			metricValues[name] = append(metricValues[name], value)
 			if a := detector.Check(name, value); a != nil {
+				a.Timestamp = current.Timestamp
+				a.TopCPUProcess = toAnomalyProcess(current.TopCPUProcess)
+				a.TopMemProcess = toAnomalyProcess(current.TopMemProcess)
 				result.Anomalies = append(result.Anomalies, *a)
 			}
 		}
@@ -99,6 +108,16 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 
 	result.TotalAnomalies = len(result.Anomalies)
 	return result
+}
+
+func NormalizeParams(windowSize int, threshold float64) (int, float64) {
+	if windowSize < minWindowSize {
+		windowSize = minWindowSize
+	}
+	if threshold <= 0 {
+		threshold = defaultThreshold
+	}
+	return windowSize, threshold
 }
 
 func delta(current, previous uint64) uint64 {
@@ -139,7 +158,7 @@ func FormatSummary(result AnalysisResult) string {
 	}
 	b.WriteString("Top anomalies:\n")
 	for _, a := range top {
-		fmt.Fprintf(&b, "- %s: %.2f (z=%.2f, %s)\n", a.Name, a.Value, a.ZScore, a.Severity)
+		fmt.Fprintf(&b, "- %s: %.2f (z=%.2f, %s)%s\n", a.Name, a.Value, a.ZScore, a.Severity, formatAnomalyContextInline(a))
 	}
 	return b.String()
 }
@@ -191,7 +210,7 @@ func FormatMarkdown(result AnalysisResult) string {
 	b.WriteString("## Anomalies\n")
 	sort.Slice(result.Anomalies, func(i, j int) bool { return abs(result.Anomalies[i].ZScore) > abs(result.Anomalies[j].ZScore) })
 	for _, a := range result.Anomalies {
-		fmt.Fprintf(&b, "- **%s**: value %s (baseline %s ± %s, z=%.2f, %s). %s\n",
+		fmt.Fprintf(&b, "- **%s**: value %s (baseline %s ± %s, z=%.2f, %s). %s%s\n",
 			a.Name,
 			formatMetricValue(a.Name, a.Value),
 			formatMetricValue(a.Name, a.Mean),
@@ -199,6 +218,7 @@ func FormatMarkdown(result AnalysisResult) string {
 			a.ZScore,
 			a.Severity,
 			a.Explanation,
+			formatAnomalyContextParagraph(a),
 		)
 	}
 	return b.String()
@@ -251,6 +271,18 @@ func stableHostID(samples []collector.MetricSample) string {
 		}
 	}
 	return host
+}
+
+func toAnomalyProcess(p *collector.ProcessAttribution) *anomaly.ProcessAttribution {
+	if p == nil {
+		return nil
+	}
+	return &anomaly.ProcessAttribution{
+		PID:        p.PID,
+		Name:       p.Name,
+		CPUPercent: p.CPUPercent,
+		RSSBytes:   p.RSSBytes,
+	}
 }
 
 func computeStats(values []float64) MetricStats {
@@ -322,6 +354,48 @@ func formatMetricValue(name string, v float64) string {
 	default:
 		return fmt.Sprintf("%.2f", v)
 	}
+}
+
+func formatAnomalyContextInline(a anomaly.Anomaly) string {
+	parts := make([]string, 0, 3)
+	if !a.Timestamp.IsZero() {
+		parts = append(parts, fmt.Sprintf("at %s", a.Timestamp.Format(time.RFC3339)))
+	}
+	if a.TopCPUProcess != nil {
+		parts = append(parts, fmt.Sprintf("top CPU %s", formatProcessInline(*a.TopCPUProcess)))
+	}
+	if a.TopMemProcess != nil {
+		parts = append(parts, fmt.Sprintf("top MEM %s", formatProcessInline(*a.TopMemProcess)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(parts, "; ") + "]"
+}
+
+func formatAnomalyContextParagraph(a anomaly.Anomaly) string {
+	parts := make([]string, 0, 3)
+	if !a.Timestamp.IsZero() {
+		parts = append(parts, fmt.Sprintf("Observed at %s.", a.Timestamp.Format(time.RFC3339)))
+	}
+	if a.TopCPUProcess != nil {
+		parts = append(parts, fmt.Sprintf("Top CPU process: %s.", formatProcessDetailed(*a.TopCPUProcess)))
+	}
+	if a.TopMemProcess != nil {
+		parts = append(parts, fmt.Sprintf("Top memory process: %s.", formatProcessDetailed(*a.TopMemProcess)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ")
+}
+
+func formatProcessInline(p anomaly.ProcessAttribution) string {
+	return fmt.Sprintf("%s(pid=%d)", p.Name, p.PID)
+}
+
+func formatProcessDetailed(p anomaly.ProcessAttribution) string {
+	return fmt.Sprintf("%s (pid %d, cpu %.1f%%, rss %s)", p.Name, p.PID, p.CPUPercent, humanBytes(float64(p.RSSBytes)))
 }
 
 func humanBytes(v float64) string {

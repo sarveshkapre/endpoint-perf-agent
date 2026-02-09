@@ -2,6 +2,7 @@ package report
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,5 +140,89 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 	}
 	if _, ok := decoded["baselines"]; !ok {
 		t.Fatalf("expected baselines in json")
+	}
+}
+
+func TestAnalyzeNormalizesWindowAndThreshold(t *testing.T) {
+	t0 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	samples := []collector.MetricSample{
+		{Timestamp: t0, CPUPercent: 10, MemUsedPercent: 40, DiskUsedPercent: 50},
+		{Timestamp: t0.Add(1 * time.Second), CPUPercent: 11, MemUsedPercent: 40, DiskUsedPercent: 50},
+	}
+
+	result := Analyze(samples, 1, -5)
+	if got, want := result.WindowSize, 5; got != want {
+		t.Fatalf("expected normalized window %d, got %d", want, got)
+	}
+	if got, want := result.ZScoreThreshold, 3.0; got != want {
+		t.Fatalf("expected normalized threshold %.1f, got %.1f", want, got)
+	}
+}
+
+func TestAnalyzeAttachesAnomalyProcessContext(t *testing.T) {
+	start := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	samples := make([]collector.MetricSample, 0, 8)
+	baseline := []float64{10, 11, 9, 10, 12, 11, 10}
+	for i := 0; i < len(baseline); i++ {
+		samples = append(samples, collector.MetricSample{
+			Timestamp:       start.Add(time.Duration(i) * time.Second),
+			CPUPercent:      baseline[i],
+			MemUsedPercent:  40,
+			DiskUsedPercent: 50,
+			DiskReadBytes:   uint64(i * 100),
+			DiskWriteBytes:  uint64(i * 100),
+			NetRxBytes:      uint64(i * 100),
+			NetTxBytes:      uint64(i * 100),
+		})
+	}
+
+	anomalyTimestamp := start.Add(7 * time.Second)
+	samples = append(samples, collector.MetricSample{
+		Timestamp:       anomalyTimestamp,
+		CPUPercent:      95,
+		MemUsedPercent:  40,
+		DiskUsedPercent: 50,
+		DiskReadBytes:   2000,
+		DiskWriteBytes:  2000,
+		NetRxBytes:      2000,
+		NetTxBytes:      2000,
+		TopCPUProcess: &collector.ProcessAttribution{
+			PID:        1234,
+			Name:       "cpu-hog",
+			CPUPercent: 88.8,
+			RSSBytes:   128 * 1024 * 1024,
+		},
+		TopMemProcess: &collector.ProcessAttribution{
+			PID:        2222,
+			Name:       "mem-hog",
+			CPUPercent: 12.3,
+			RSSBytes:   2 * 1024 * 1024 * 1024,
+		},
+	})
+
+	result := Analyze(samples, 5, 2.5)
+	if len(result.Anomalies) == 0 {
+		t.Fatal("expected anomaly")
+	}
+	first := result.Anomalies[0]
+	if first.Timestamp.IsZero() {
+		t.Fatal("expected anomaly timestamp")
+	}
+	if !first.Timestamp.Equal(anomalyTimestamp) {
+		t.Fatalf("expected anomaly timestamp %s, got %s", anomalyTimestamp, first.Timestamp)
+	}
+	if first.TopCPUProcess == nil || first.TopCPUProcess.Name != "cpu-hog" {
+		t.Fatalf("expected top cpu process context, got %+v", first.TopCPUProcess)
+	}
+	if first.TopMemProcess == nil || first.TopMemProcess.Name != "mem-hog" {
+		t.Fatalf("expected top memory process context, got %+v", first.TopMemProcess)
+	}
+
+	md := FormatMarkdown(result)
+	if !strings.Contains(md, "Top CPU process: cpu-hog") {
+		t.Fatalf("expected markdown to include top cpu process context, got: %s", md)
+	}
+	if !strings.Contains(md, "Top memory process: mem-hog") {
+		t.Fatalf("expected markdown to include top memory process context, got: %s", md)
 	}
 }

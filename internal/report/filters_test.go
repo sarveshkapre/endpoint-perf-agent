@@ -61,3 +61,31 @@ func TestApplyFiltersRejectsUnknownSeverity(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestApplyFiltersAcceptsMixedCaseSeverity(t *testing.T) {
+	in := AnalysisResult{
+		TotalAnomalies: 2,
+		Anomalies: []anomaly.Anomaly{
+			{Name: "a", Severity: "low", ZScore: 2},
+			{Name: "b", Severity: "high", ZScore: 8},
+		},
+	}
+
+	out, err := ApplyFilters(in, "HIGH", 0)
+	if err != nil {
+		t.Fatalf("ApplyFilters: %v", err)
+	}
+	if got, want := len(out.Anomalies), 1; got != want {
+		t.Fatalf("expected %d anomaly, got %d", want, got)
+	}
+	if out.Anomalies[0].Name != "b" {
+		t.Fatalf("expected high severity anomaly to remain")
+	}
+}
+
+func TestApplyFiltersRejectsNegativeTop(t *testing.T) {
+	_, err := ApplyFilters(AnalysisResult{}, "low", -1)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

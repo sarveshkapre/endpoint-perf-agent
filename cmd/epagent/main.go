@@ -100,6 +100,9 @@ func runCollect(args []string) error {
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be greater than zero")
 	}
+	if cfg.Duration < 0 {
+		return errors.New("duration must be greater than or equal to zero")
+	}
 
 	if cfg.OutputPath == "" {
 		return errors.New("output path is required")
@@ -168,6 +171,15 @@ func runAnalyze(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *window < 0 {
+		return errors.New("window must be greater than or equal to zero")
+	}
+	if *threshold < 0 {
+		return errors.New("threshold must be greater than or equal to zero")
+	}
+	if *top < 0 {
+		return errors.New("top must be greater than or equal to zero")
+	}
 
 	cfg, err := config.Load("")
 	if err != nil {
@@ -193,7 +205,8 @@ func runAnalyze(args []string) error {
 		return err
 	}
 
-	result := report.Analyze(samples, cfg.WindowSize, cfg.ZScoreThreshold)
+	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
+	result := report.Analyze(samples, windowSize, zScoreThreshold)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
@@ -226,6 +239,15 @@ func runReport(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *window < 0 {
+		return errors.New("window must be greater than or equal to zero")
+	}
+	if *threshold < 0 {
+		return errors.New("threshold must be greater than or equal to zero")
+	}
+	if *top < 0 {
+		return errors.New("top must be greater than or equal to zero")
+	}
 
 	cfg, err := config.Load("")
 	if err != nil {
@@ -251,7 +273,8 @@ func runReport(args []string) error {
 		return err
 	}
 
-	result := report.Analyze(samples, cfg.WindowSize, cfg.ZScoreThreshold)
+	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
+	result := report.Analyze(samples, windowSize, zScoreThreshold)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
