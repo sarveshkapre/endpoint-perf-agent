@@ -41,6 +41,6 @@ make release
 ```
 
 ## Next 3 improvements
-- Add per-process attribution for CPU/memory spikes
 - Add SQLite storage mode and rotation policies
 - Add alert output formats (JSON, syslog)
+- Add static/percentile threshold rule options

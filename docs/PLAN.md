@@ -34,11 +34,13 @@ Ship a local-first endpoint performance agent that samples host metrics, detects
 - Disk/network deltas may reset after reboot.
 
 ## Next Milestones
-- Per-process attribution for top offenders
 - Optional SQLite storage
 - Configurable alert rules (percentile, static thresholds)
+- Syslog/JSON alert output targets
 
 ## Shipped
+- 2026-02-09: Per-sample top-process attribution and anomaly context (timestamp + process details) in analyze/report outputs.
+- 2026-02-09: Analysis/report input hardening (`--window`/`--threshold`/`--top`) and line-numbered JSONL parse errors.
 - 2026-02-01: `analyze --format json`, `report --out -`, more robust sample handling + clearer explanations.
 - 2026-02-01: `--min-severity` + `--top` filters for `analyze`/`report`.
 - 2026-02-01: Baseline summaries (mean/stddev/min/max) in Markdown and JSON outputs.

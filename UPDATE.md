@@ -1,3 +1,28 @@
+# Update (2026-02-09)
+
+## Shipped
+- Added per-sample process attribution during collection:
+  - `top_cpu_process` (pid/name/cpu/rss)
+  - `top_mem_process` (pid/name/cpu/rss)
+- Added richer anomaly context in `analyze` and `report` outputs:
+  - anomaly timestamp
+  - top CPU and top memory process details at detection time
+- Hardened runtime parameter handling:
+  - normalize analysis params to detector-safe values (`window>=5`, `threshold>0`)
+  - reject negative `--window`, `--threshold`, and `--top`
+  - accept case-insensitive severity filters for `--min-severity`
+- Improved JSONL corruption diagnostics with line-numbered parse errors.
+
+## Verify
+- `make check`
+- `./bin/epagent collect --once --out tmp/smoke-metrics.jsonl`
+- `./bin/epagent analyze --in tmp/smoke-metrics.jsonl --format json`
+- `./bin/epagent report --in tmp/smoke-metrics.jsonl --out -`
+- `./bin/epagent analyze --in tmp/smoke-metrics.jsonl --top -1` (expects non-zero exit + validation error)
+
+## Notes
+- No external API integration was changed; external integration smoke checks are not applicable for this update.
+
 # Update (2026-02-01)
 
 ## Shipped

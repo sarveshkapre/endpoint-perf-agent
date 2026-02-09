@@ -5,6 +5,6 @@
 - CI with security checks
 
 ## Next
-- Per-process attribution
 - Optional SQLite storage
 - Alert output formats (JSON, syslog)
+- Static-threshold and percentile-based alert rules

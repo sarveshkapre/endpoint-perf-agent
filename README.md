@@ -9,9 +9,10 @@ Cross-platform endpoint performance agent that samples CPU/memory/disk/network m
 
 ## Features
 - CPU, memory, disk, and network sampling (cross-platform via gopsutil).
+- Per-sample top CPU and top memory process attribution for triage context.
 - Rolling z-score anomaly detection with severity levels.
 - JSONL storage for easy ingestion.
-- Markdown report generation with explanations + baseline summaries.
+- Markdown/JSON analysis output with anomaly timestamps, process context, and baseline summaries.
 
 ## Quickstart
 ```bash
