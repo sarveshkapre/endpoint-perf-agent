@@ -8,6 +8,7 @@
 - Baseline summaries (mean/stddev/min/max) in Markdown report and JSON output.
 - Robust sample handling (timestamp sorting, tolerate blank lines) and clearer explanations.
 - `--min-severity` and `--top` filtering for `analyze` and `report`.
+- Added metric family allow-listing (`enabled_metrics` / `--metrics`) to tune overhead by enabling only cpu/mem/disk/net as needed.
 - Added per-sample top-process attribution (`top_cpu_process`, `top_mem_process`) in collected JSONL.
 - Added anomaly context in analysis outputs (timestamp + top CPU/memory process details).
 - Normalized analysis window/threshold values to detector-safe minimums in output (`window>=5`, `threshold>0`).

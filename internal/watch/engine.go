@@ -51,11 +51,21 @@ func (e *Engine) Params() (windowSize int, threshold float64) {
 }
 
 func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
+	families := collector.DefaultMetricFamilies()
+	if sample.MetricFamilies != nil {
+		families = *sample.MetricFamilies
+	}
 	if e.prev == nil {
 		// Seed the detector with the absolute metrics so we can start learning immediately.
-		_ = e.detector.Check("cpu_percent", sample.CPUPercent)
-		_ = e.detector.Check("mem_used_percent", sample.MemUsedPercent)
-		_ = e.detector.Check("disk_used_percent", sample.DiskUsedPercent)
+		if families.CPU {
+			_ = e.detector.Check("cpu_percent", sample.CPUPercent)
+		}
+		if families.Mem {
+			_ = e.detector.Check("mem_used_percent", sample.MemUsedPercent)
+		}
+		if families.Disk {
+			_ = e.detector.Check("disk_used_percent", sample.DiskUsedPercent)
+		}
 		e.prev = &sample
 		return nil
 	}
@@ -63,19 +73,33 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 	prev := *e.prev
 	e.prev = &sample
 
+	prevFamilies := collector.DefaultMetricFamilies()
+	if prev.MetricFamilies != nil {
+		prevFamilies = *prev.MetricFamilies
+	}
+
 	dt := sample.Timestamp.Sub(prev.Timestamp).Seconds()
 	if dt <= 0 {
 		dt = 1
 	}
 
-	metrics := map[string]float64{
-		"cpu_percent":              sample.CPUPercent,
-		"mem_used_percent":         sample.MemUsedPercent,
-		"disk_used_percent":        sample.DiskUsedPercent,
-		"disk_read_bytes_per_sec":  float64(delta(sample.DiskReadBytes, prev.DiskReadBytes)) / dt,
-		"disk_write_bytes_per_sec": float64(delta(sample.DiskWriteBytes, prev.DiskWriteBytes)) / dt,
-		"net_rx_bytes_per_sec":     float64(delta(sample.NetRxBytes, prev.NetRxBytes)) / dt,
-		"net_tx_bytes_per_sec":     float64(delta(sample.NetTxBytes, prev.NetTxBytes)) / dt,
+	metrics := map[string]float64{}
+	if families.CPU {
+		metrics["cpu_percent"] = sample.CPUPercent
+	}
+	if families.Mem {
+		metrics["mem_used_percent"] = sample.MemUsedPercent
+	}
+	if families.Disk {
+		metrics["disk_used_percent"] = sample.DiskUsedPercent
+		if prevFamilies.Disk {
+			metrics["disk_read_bytes_per_sec"] = float64(delta(sample.DiskReadBytes, prev.DiskReadBytes)) / dt
+			metrics["disk_write_bytes_per_sec"] = float64(delta(sample.DiskWriteBytes, prev.DiskWriteBytes)) / dt
+		}
+	}
+	if families.Net && prevFamilies.Net {
+		metrics["net_rx_bytes_per_sec"] = float64(delta(sample.NetRxBytes, prev.NetRxBytes)) / dt
+		metrics["net_tx_bytes_per_sec"] = float64(delta(sample.NetTxBytes, prev.NetTxBytes)) / dt
 	}
 
 	alerts := make([]alert.Alert, 0)

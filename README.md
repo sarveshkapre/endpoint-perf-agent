@@ -9,6 +9,7 @@ Cross-platform endpoint performance agent that samples CPU/memory/disk/network m
 
 ## Features
 - CPU, memory, disk, and network sampling (cross-platform via gopsutil).
+- Metric family allow-listing (cpu/mem/disk/net) to tune overhead and reduce noise.
 - Per-sample top CPU and top memory process attribution for triage context.
 - Rolling z-score anomaly detection with severity levels.
 - JSONL storage for easy ingestion.
@@ -38,6 +39,7 @@ Create a JSON config and pass it to `collect` with `--config`.
 {
   "interval": "5s",
   "duration": "1m",
+  "enabled_metrics": ["cpu", "mem", "disk", "net"],
   "window_size": 30,
   "zscore_threshold": 3.0,
   "output_path": "data/metrics.jsonl",
@@ -49,7 +51,9 @@ Create a JSON config and pass it to `collect` with `--config`.
 ## Commands
 ```bash
 epagent collect --once
+epagent collect --duration 60s --metrics cpu,mem
 epagent watch --min-severity high --sink stdout
+epagent watch --duration 60s --metrics cpu,mem --sink syslog
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10

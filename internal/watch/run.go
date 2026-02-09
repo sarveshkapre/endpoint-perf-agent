@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/alert"
@@ -62,7 +63,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if r.Writer != nil {
+		if !isNilInterface(r.Writer) {
 			if err := r.Writer.Write(sample); err != nil {
 				return err
 			}
@@ -79,5 +80,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 		}
+	}
+}
+
+func isNilInterface(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
 	}
 }

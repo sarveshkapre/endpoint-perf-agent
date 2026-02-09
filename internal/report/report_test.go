@@ -226,3 +226,40 @@ func TestAnalyzeAttachesAnomalyProcessContext(t *testing.T) {
 		t.Fatalf("expected markdown to include top memory process context, got: %s", md)
 	}
 }
+
+func TestAnalyze_RespectsMetricFamilies(t *testing.T) {
+	t0 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	families := &collector.MetricFamilies{CPU: true, Mem: true, Disk: false, Net: false}
+	samples := []collector.MetricSample{
+		{
+			Timestamp:      t0,
+			CPUPercent:     10,
+			MemUsedPercent: 40,
+			MetricFamilies: families,
+			DiskReadBytes:  1000,
+			NetRxBytes:     1000,
+		},
+		{
+			Timestamp:      t0.Add(1 * time.Second),
+			CPUPercent:     11,
+			MemUsedPercent: 40,
+			MetricFamilies: families,
+			DiskReadBytes:  2000,
+			NetRxBytes:     2000,
+		},
+	}
+
+	result := Analyze(samples, 5, 3.0)
+	if _, ok := result.Baselines["net_rx_bytes_per_sec"]; ok {
+		t.Fatalf("expected net_rx_bytes_per_sec to be absent when net family disabled")
+	}
+	if _, ok := result.Baselines["disk_read_bytes_per_sec"]; ok {
+		t.Fatalf("expected disk_read_bytes_per_sec to be absent when disk family disabled")
+	}
+	if _, ok := result.Baselines["cpu_percent"]; !ok {
+		t.Fatalf("expected cpu_percent baseline to exist")
+	}
+	if _, ok := result.Baselines["mem_used_percent"]; !ok {
+		t.Fatalf("expected mem_used_percent baseline to exist")
+	}
+}

@@ -2,8 +2,10 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -29,23 +31,32 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval           time.Duration `json:"-"`
-	Duration           time.Duration `json:"-"`
-	WindowSize         int           `json:"window_size"`
-	ZScoreThreshold    float64       `json:"zscore_threshold"`
-	OutputPath         string        `json:"output_path"`
-	HostID             string        `json:"host_id"`
-	ProcessAttribution bool          `json:"process_attribution"`
+	Interval           time.Duration  `json:"-"`
+	Duration           time.Duration  `json:"-"`
+	WindowSize         int            `json:"window_size"`
+	ZScoreThreshold    float64        `json:"zscore_threshold"`
+	OutputPath         string         `json:"output_path"`
+	HostID             string         `json:"host_id"`
+	ProcessAttribution bool           `json:"process_attribution"`
+	Metrics            MetricFamilies `json:"-"`
 }
 
 type fileConfig struct {
-	Interval           Duration `json:"interval"`
-	Duration           Duration `json:"duration"`
-	WindowSize         int      `json:"window_size"`
-	ZScoreThreshold    float64  `json:"zscore_threshold"`
-	OutputPath         string   `json:"output_path"`
-	HostID             string   `json:"host_id"`
-	ProcessAttribution *bool    `json:"process_attribution"`
+	Interval           Duration  `json:"interval"`
+	Duration           Duration  `json:"duration"`
+	WindowSize         int       `json:"window_size"`
+	ZScoreThreshold    float64   `json:"zscore_threshold"`
+	OutputPath         string    `json:"output_path"`
+	HostID             string    `json:"host_id"`
+	ProcessAttribution *bool     `json:"process_attribution"`
+	EnabledMetrics     *[]string `json:"enabled_metrics"`
+}
+
+type MetricFamilies struct {
+	CPU  bool
+	Mem  bool
+	Disk bool
+	Net  bool
 }
 
 func Default() Config {
@@ -57,6 +68,12 @@ func Default() Config {
 		OutputPath:         filepath.Join("data", "metrics.jsonl"),
 		HostID:             "",
 		ProcessAttribution: true,
+		Metrics: MetricFamilies{
+			CPU:  true,
+			Mem:  true,
+			Disk: true,
+			Net:  true,
+		},
 	}
 }
 
@@ -94,5 +111,65 @@ func Load(path string) (Config, error) {
 	if fc.ProcessAttribution != nil {
 		cfg.ProcessAttribution = *fc.ProcessAttribution
 	}
+	if fc.EnabledMetrics != nil {
+		m, err := ParseMetricFamilies(*fc.EnabledMetrics)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.Metrics = m
+	}
 	return cfg, nil
+}
+
+func ParseMetricFamilies(enabled []string) (MetricFamilies, error) {
+	if enabled == nil {
+		// Field not provided: use defaults.
+		return Default().Metrics, nil
+	}
+	m := MetricFamilies{}
+	for _, raw := range enabled {
+		name := normalizeMetricName(raw)
+		switch name {
+		case "cpu":
+			m.CPU = true
+		case "mem":
+			m.Mem = true
+		case "disk":
+			m.Disk = true
+		case "net":
+			m.Net = true
+		case "":
+			// ignore empty entries
+		default:
+			return MetricFamilies{}, &MetricFamiliesError{Name: raw}
+		}
+	}
+	if !m.Any() {
+		return MetricFamilies{}, errors.New("at least one metric family must be enabled")
+	}
+	return m, nil
+}
+
+func (m MetricFamilies) Any() bool {
+	return m.CPU || m.Mem || m.Disk || m.Net
+}
+
+type MetricFamiliesError struct {
+	Name string
+}
+
+func (e *MetricFamiliesError) Error() string {
+	return "unknown metric family: " + e.Name + " (expected cpu|mem|disk|net)"
+}
+
+func normalizeMetricName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "memory":
+		return "mem"
+	case "network":
+		return "net"
+	default:
+		return s
+	}
 }

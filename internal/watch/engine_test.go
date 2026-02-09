@@ -93,3 +93,33 @@ func TestNewEngine_RejectsUnknownSeverity(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestEngine_RespectsMetricFamilies(t *testing.T) {
+	engine, err := NewEngine(5, 3.0, "low", 0)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	base := time.Date(2026, 2, 9, 0, 0, 0, 0, time.UTC)
+	values := []float64{10, 11, 9, 10, 12, 50}
+	disabledCPU := &collector.MetricFamilies{CPU: false, Mem: true, Disk: true, Net: true}
+
+	var gotCPU bool
+	for i, v := range values {
+		s := collector.MetricSample{
+			Timestamp:      base.Add(time.Duration(i) * time.Second),
+			HostID:         "host-1",
+			CPUPercent:     v,
+			MemUsedPercent: 20,
+			MetricFamilies: disabledCPU,
+		}
+		for _, a := range engine.Observe(s) {
+			if a.Metric == "cpu_percent" {
+				gotCPU = true
+			}
+		}
+	}
+	if gotCPU {
+		t.Fatalf("expected no cpu_percent alerts when CPU family is disabled")
+	}
+}

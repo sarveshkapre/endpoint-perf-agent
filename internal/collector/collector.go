@@ -32,61 +32,86 @@ type MetricSample struct {
 	NetTxBytes      uint64              `json:"net_tx_bytes"`
 	TopCPUProcess   *ProcessAttribution `json:"top_cpu_process,omitempty"`
 	TopMemProcess   *ProcessAttribution `json:"top_mem_process,omitempty"`
+	MetricFamilies  *MetricFamilies     `json:"metric_families,omitempty"`
+}
+
+type MetricFamilies struct {
+	CPU  bool `json:"cpu"`
+	Mem  bool `json:"mem"`
+	Disk bool `json:"disk"`
+	Net  bool `json:"net"`
+}
+
+func DefaultMetricFamilies() MetricFamilies {
+	return MetricFamilies{CPU: true, Mem: true, Disk: true, Net: true}
 }
 
 type Sampler struct {
 	hostID             string
 	processAttribution bool
+	metrics            MetricFamilies
 }
 
-func NewSampler(hostID string, processAttribution bool) *Sampler {
-	return &Sampler{hostID: hostID, processAttribution: processAttribution}
+func NewSampler(hostID string, processAttribution bool, metrics MetricFamilies) *Sampler {
+	return &Sampler{hostID: hostID, processAttribution: processAttribution, metrics: metrics}
 }
 
 func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
-	cpuPercents, err := cpu.PercentWithContext(ctx, 0, false)
-	if err != nil {
-		return MetricSample{}, err
-	}
 	cpuPercent := 0.0
-	if len(cpuPercents) > 0 {
-		cpuPercent = cpuPercents[0]
+	if s.metrics.CPU {
+		cpuPercents, err := cpu.PercentWithContext(ctx, 0, false)
+		if err != nil {
+			return MetricSample{}, err
+		}
+		if len(cpuPercents) > 0 {
+			cpuPercent = cpuPercents[0]
+		}
 	}
 
-	vm, err := mem.VirtualMemoryWithContext(ctx)
-	if err != nil {
-		return MetricSample{}, err
+	memUsedPercent := 0.0
+	if s.metrics.Mem {
+		vm, err := mem.VirtualMemoryWithContext(ctx)
+		if err != nil {
+			return MetricSample{}, err
+		}
+		memUsedPercent = vm.UsedPercent
 	}
 
-	diskPath := "/"
-	if runtime.GOOS == "windows" {
-		diskPath = "C:\\"
-	}
-	usage, err := disk.UsageWithContext(ctx, diskPath)
-	if err != nil {
-		return MetricSample{}, err
-	}
-
-	ioCounters, err := disk.IOCountersWithContext(ctx)
-	if err != nil {
-		return MetricSample{}, err
-	}
+	diskUsedPercent := 0.0
 	var readBytes uint64
 	var writeBytes uint64
-	for _, stat := range ioCounters {
-		readBytes += stat.ReadBytes
-		writeBytes += stat.WriteBytes
+	if s.metrics.Disk {
+		diskPath := "/"
+		if runtime.GOOS == "windows" {
+			diskPath = "C:\\"
+		}
+		usage, err := disk.UsageWithContext(ctx, diskPath)
+		if err != nil {
+			return MetricSample{}, err
+		}
+		diskUsedPercent = usage.UsedPercent
+
+		ioCounters, err := disk.IOCountersWithContext(ctx)
+		if err != nil {
+			return MetricSample{}, err
+		}
+		for _, stat := range ioCounters {
+			readBytes += stat.ReadBytes
+			writeBytes += stat.WriteBytes
+		}
 	}
 
-	netCounters, err := net.IOCountersWithContext(ctx, false)
-	if err != nil {
-		return MetricSample{}, err
-	}
 	var rxBytes uint64
 	var txBytes uint64
-	if len(netCounters) > 0 {
-		rxBytes = netCounters[0].BytesRecv
-		txBytes = netCounters[0].BytesSent
+	if s.metrics.Net {
+		netCounters, err := net.IOCountersWithContext(ctx, false)
+		if err != nil {
+			return MetricSample{}, err
+		}
+		if len(netCounters) > 0 {
+			rxBytes = netCounters[0].BytesRecv
+			txBytes = netCounters[0].BytesSent
+		}
 	}
 
 	var topCPUProcess *ProcessAttribution
@@ -99,14 +124,15 @@ func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
 		Timestamp:       time.Now().UTC(),
 		HostID:          s.hostID,
 		CPUPercent:      cpuPercent,
-		MemUsedPercent:  vm.UsedPercent,
-		DiskUsedPercent: usage.UsedPercent,
+		MemUsedPercent:  memUsedPercent,
+		DiskUsedPercent: diskUsedPercent,
 		DiskReadBytes:   readBytes,
 		DiskWriteBytes:  writeBytes,
 		NetRxBytes:      rxBytes,
 		NetTxBytes:      txBytes,
 		TopCPUProcess:   topCPUProcess,
 		TopMemProcess:   topMemProcess,
+		MetricFamilies:  &MetricFamilies{CPU: s.metrics.CPU, Mem: s.metrics.Mem, Disk: s.metrics.Disk, Net: s.metrics.Net},
 	}, nil
 }
 

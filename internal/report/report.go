@@ -62,28 +62,54 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 	result.LastTimestamp = ordered[len(ordered)-1].Timestamp
 	result.Duration = result.LastTimestamp.Sub(result.FirstTimestamp)
 
-	metricValues := map[string][]float64{
-		"cpu_percent":       {ordered[0].CPUPercent},
-		"mem_used_percent":  {ordered[0].MemUsedPercent},
-		"disk_used_percent": {ordered[0].DiskUsedPercent},
+	metricValues := map[string][]float64{}
+	firstFamilies := collector.DefaultMetricFamilies()
+	if ordered[0].MetricFamilies != nil {
+		firstFamilies = *ordered[0].MetricFamilies
+	}
+	if firstFamilies.CPU {
+		metricValues["cpu_percent"] = []float64{ordered[0].CPUPercent}
+	}
+	if firstFamilies.Mem {
+		metricValues["mem_used_percent"] = []float64{ordered[0].MemUsedPercent}
+	}
+	if firstFamilies.Disk {
+		metricValues["disk_used_percent"] = []float64{ordered[0].DiskUsedPercent}
 	}
 
 	prev := ordered[0]
 	for i := 1; i < len(ordered); i++ {
 		current := ordered[i]
+		currentFamilies := collector.DefaultMetricFamilies()
+		if current.MetricFamilies != nil {
+			currentFamilies = *current.MetricFamilies
+		}
+		prevFamilies := collector.DefaultMetricFamilies()
+		if prev.MetricFamilies != nil {
+			prevFamilies = *prev.MetricFamilies
+		}
 		dt := current.Timestamp.Sub(prev.Timestamp).Seconds()
 		if dt <= 0 {
 			dt = 1
 		}
 
-		metrics := map[string]float64{
-			"cpu_percent":              current.CPUPercent,
-			"mem_used_percent":         current.MemUsedPercent,
-			"disk_used_percent":        current.DiskUsedPercent,
-			"disk_read_bytes_per_sec":  float64(delta(current.DiskReadBytes, prev.DiskReadBytes)) / dt,
-			"disk_write_bytes_per_sec": float64(delta(current.DiskWriteBytes, prev.DiskWriteBytes)) / dt,
-			"net_rx_bytes_per_sec":     float64(delta(current.NetRxBytes, prev.NetRxBytes)) / dt,
-			"net_tx_bytes_per_sec":     float64(delta(current.NetTxBytes, prev.NetTxBytes)) / dt,
+		metrics := map[string]float64{}
+		if currentFamilies.CPU {
+			metrics["cpu_percent"] = current.CPUPercent
+		}
+		if currentFamilies.Mem {
+			metrics["mem_used_percent"] = current.MemUsedPercent
+		}
+		if currentFamilies.Disk {
+			metrics["disk_used_percent"] = current.DiskUsedPercent
+			if prevFamilies.Disk {
+				metrics["disk_read_bytes_per_sec"] = float64(delta(current.DiskReadBytes, prev.DiskReadBytes)) / dt
+				metrics["disk_write_bytes_per_sec"] = float64(delta(current.DiskWriteBytes, prev.DiskWriteBytes)) / dt
+			}
+		}
+		if currentFamilies.Net && prevFamilies.Net {
+			metrics["net_rx_bytes_per_sec"] = float64(delta(current.NetRxBytes, prev.NetRxBytes)) / dt
+			metrics["net_tx_bytes_per_sec"] = float64(delta(current.NetTxBytes, prev.NetTxBytes)) / dt
 		}
 
 		for name, value := range metrics {

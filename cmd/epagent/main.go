@@ -91,6 +91,7 @@ func runCollect(args []string) error {
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
+	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -100,6 +101,13 @@ func runCollect(args []string) error {
 	cfg.Duration = *duration
 	cfg.OutputPath = *out
 	cfg.ProcessAttribution = *processAttribution
+	if *metrics != "" {
+		m, err := parseMetricFamiliesCSV(*metrics)
+		if err != nil {
+			return err
+		}
+		cfg.Metrics = m
+	}
 	if *once {
 		cfg.Duration = 0
 	}
@@ -125,7 +133,7 @@ func runCollect(args []string) error {
 	}
 	defer writer.Close()
 
-	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution)
+	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -253,6 +261,7 @@ func runWatch(args []string) error {
 	sink := fs.String("sink", "stdout", "Alert sink: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
+	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -278,12 +287,20 @@ func runWatch(args []string) error {
 	cfg.WindowSize = *window
 	cfg.ZScoreThreshold = *threshold
 	cfg.ProcessAttribution = *processAttribution
+	if *metrics != "" {
+		m, err := parseMetricFamiliesCSV(*metrics)
+		if err != nil {
+			return err
+		}
+		cfg.Metrics = m
+	}
 
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be greater than zero")
 	}
 
-	var writer *storage.Writer
+	var writer watch.SampleWriter
+	var writerCloser interface{ Close() error }
 	if *out != "" {
 		if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
 			return err
@@ -293,10 +310,11 @@ func runWatch(args []string) error {
 			return err
 		}
 		writer = w
-		defer writer.Close()
+		writerCloser = w
+		defer writerCloser.Close()
 	}
 
-	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution)
+	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
 	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, *minSeverity, *cooldown)
 	if err != nil {
@@ -330,6 +348,23 @@ func runWatch(args []string) error {
 		Writer:   writer,
 	}
 	return runner.Run(ctx)
+}
+
+func parseMetricFamiliesCSV(csv string) (config.MetricFamilies, error) {
+	parts := strings.Split(csv, ",")
+	enabled := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		enabled = append(enabled, p)
+	}
+	return config.ParseMetricFamilies(enabled)
+}
+
+func toCollectorMetrics(m config.MetricFamilies) collector.MetricFamilies {
+	return collector.MetricFamilies{CPU: m.CPU, Mem: m.Mem, Disk: m.Disk, Net: m.Net}
 }
 
 func runReport(args []string) error {

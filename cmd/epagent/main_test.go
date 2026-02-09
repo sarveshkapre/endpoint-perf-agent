@@ -54,3 +54,9 @@ func TestWatch_RejectsNegativeDuration(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestWatch_RejectsUnknownMetrics(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--metrics", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}

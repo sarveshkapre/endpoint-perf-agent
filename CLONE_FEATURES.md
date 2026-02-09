@@ -7,14 +7,18 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P1 Add alert output sinks (structured JSON stream and syslog) for offline analysis results (`analyze`/`report`) as well as `watch`.
+- [ ] P1 Add offline alert sinks for `analyze` results: `--format ndjson` (one alert per line) and optional syslog emission for piping into existing ops workflows.
   Score: impact high | effort medium | strategic fit high | differentiation medium | risk medium | confidence medium
-- [ ] P1 Add configurable static and percentile-based alert rules (in addition to z-score), selectable per metric.
+- [ ] P1 Support `collect --out -` (stdout JSONL) for easy piping/testing and to reduce filesystem coupling.
+  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence high
+- [ ] P2 Add `--since`/`--until` time-range filtering to `analyze`/`report` for focusing on incidents.
+  Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P2 Add configurable static and percentile-based alert rules (in addition to z-score), selectable per metric.
   Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Optional SQLite storage mode with retention controls and migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
-- [ ] P2 Collector toggles: enable/disable specific metric families (cpu/mem/disk/net) to reduce overhead and noise.
-  Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P3 Add metric/host labeling controls (`--host-id`, and optional key/value labels) to improve multi-host ingestion without external systems.
+  Score: impact medium | effort low | strategic fit medium | differentiation low | risk low | confidence medium
 - [ ] P3 Improve build noise: investigate/suppress toolchain warnings from dependencies during `go test` on Apple Silicon without hiding real errors.
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
@@ -23,8 +27,12 @@
   Evidence: `AGENTS.md`, `CLONE_FEATURES.md`.
 - [x] 2026-02-09: Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
   Evidence: `internal/config/config.go`, `internal/collector/collector.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
+- [x] 2026-02-09: Added metric family allow-listing (`enabled_metrics` / `--metrics`) and persisted per-sample metric family metadata so `analyze`/`report` can respect collection scope.
+  Evidence: `internal/config/config.go`, `internal/collector/collector.go`, `internal/report/report.go`, `internal/watch/engine.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
 - [x] 2026-02-09: Added `watch` command to stream anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown and optional JSONL sample output.
   Evidence: `cmd/epagent/main.go`, `internal/watch/engine.go`, `internal/watch/run.go`, `internal/alert/alert.go`, `internal/alert/syslog_unix.go`, `internal/alert/syslog_windows.go`.
+- [x] 2026-02-09: Fixed `watch` panic when `--out` is unset (typed-nil writer assigned to interface).
+  Evidence: `cmd/epagent/main.go`, `internal/watch/run.go`, `internal/watch/run_test.go`.
 - [x] 2026-02-09: Added command-level CLI tests for validation and basic flows (analyze/report/watch) without requiring host metrics.
   Evidence: `cmd/epagent/main_test.go`, `internal/watch/engine_test.go`.
 - [x] 2026-02-09: Added per-sample process attribution (`top_cpu_process`, `top_mem_process`) in collector output.
