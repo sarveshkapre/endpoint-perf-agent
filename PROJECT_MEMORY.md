@@ -15,7 +15,7 @@
     - `./bin/epagent collect --once --out tmp/smoke-time.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host`
     - `./bin/epagent analyze --in tmp/smoke-time.jsonl --format json --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z`
     - `./bin/epagent analyze --in tmp/smoke-last.jsonl --format json --window 5 --threshold 3 --last 2s`
-- Commit: (next)
+- Commit: `846221d`
 - Confidence: high
 - Trust label: verified-local
 
