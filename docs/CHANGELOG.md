@@ -14,3 +14,4 @@
 - Added stricter CLI validation for negative `--window`, `--threshold`, and `--top` values.
 - Improved JSONL parse errors with line numbers for faster corruption diagnosis.
 - Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
+- Added `watch` command to stream anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown/dedupe.

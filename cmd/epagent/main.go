@@ -11,10 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/alert"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/config"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/report"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/storage"
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/watch"
 )
 
 const version = "0.1.0-dev"
@@ -29,6 +31,10 @@ func main() {
 	switch cmd {
 	case "collect":
 		if err := runCollect(os.Args[2:]); err != nil {
+			exitErr(err)
+		}
+	case "watch":
+		if err := runWatch(os.Args[2:]); err != nil {
 			exitErr(err)
 		}
 	case "analyze":
@@ -55,12 +61,14 @@ func usage() {
 
 Usage:
   epagent collect [flags]
+  epagent watch [flags]
   epagent analyze [flags]
   epagent report [flags]
   epagent version
 
 Commands:
   collect   Sample endpoint metrics and write JSONL to disk.
+  watch     Continuously sample and emit anomaly alerts (stdout NDJSON or syslog).
   analyze   Detect anomalies from collected samples (text or JSON output).
   report    Generate a Markdown report with explanations (use --out - for stdout).
   version   Print the agent version.
@@ -228,6 +236,110 @@ func runAnalyze(args []string) error {
 	default:
 		return fmt.Errorf("unknown format: %s (expected text|json)", *format)
 	}
+}
+
+func runWatch(args []string) error {
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	cfgPath := fs.String("config", "", "Path to config file (JSON)")
+	interval := fs.Duration("interval", 0, "Sampling interval override (e.g. 2s)")
+	duration := fs.Duration("duration", 0, "Total run duration (0 = until interrupted)")
+	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
+	window := fs.Int("window", 0, "Rolling window size override")
+	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
+	minSeverity := fs.String("min-severity", "medium", "Minimum severity to emit: low|medium|high|critical")
+	sink := fs.String("sink", "stdout", "Alert sink: stdout|syslog")
+	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
+	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
+	processAttribution := fs.Bool("process-attribution", true, "Capture per-sample top CPU/memory process attribution (can be expensive)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *interval < 0 {
+		return errors.New("interval must be greater than or equal to zero")
+	}
+	if *duration < 0 {
+		return errors.New("duration must be greater than or equal to zero")
+	}
+	if *window < 0 {
+		return errors.New("window must be greater than or equal to zero")
+	}
+	if *threshold < 0 {
+		return errors.New("threshold must be greater than or equal to zero")
+	}
+	if *cooldown < 0 {
+		return errors.New("cooldown must be greater than or equal to zero")
+	}
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	if *interval > 0 {
+		cfg.Interval = *interval
+	}
+	if *duration > 0 {
+		cfg.Duration = *duration
+	}
+	if *window > 0 {
+		cfg.WindowSize = *window
+	}
+	if *threshold > 0 {
+		cfg.ZScoreThreshold = *threshold
+	}
+	cfg.ProcessAttribution = *processAttribution
+
+	if cfg.Interval <= 0 {
+		return errors.New("interval must be greater than zero")
+	}
+
+	var writer *storage.Writer
+	if *out != "" {
+		if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
+			return err
+		}
+		w, err := storage.NewWriter(*out)
+		if err != nil {
+			return err
+		}
+		writer = w
+		defer writer.Close()
+	}
+
+	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution)
+
+	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, *minSeverity, *cooldown)
+	if err != nil {
+		return err
+	}
+
+	var alertSink alert.Sink
+	switch *sink {
+	case "stdout":
+		alertSink = alert.NewStdoutSink(os.Stdout)
+	case "syslog":
+		s, err := alert.NewSyslogSink(*syslogTag)
+		if err != nil {
+			return err
+		}
+		alertSink = s
+		defer alertSink.Close()
+	default:
+		return fmt.Errorf("unknown sink: %s (expected stdout|syslog)", *sink)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	runner := &watch.Runner{
+		Sampler:  sampler,
+		Engine:   engine,
+		Sink:     alertSink,
+		Interval: cfg.Interval,
+		Duration: cfg.Duration,
+		Writer:   writer,
+	}
+	return runner.Run(ctx)
 }
 
 func runReport(args []string) error {

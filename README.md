@@ -22,6 +22,9 @@ make build
 # collect samples for 60 seconds
 ./bin/epagent collect --duration 60s
 
+# stream alerts for 60 seconds (NDJSON to stdout)
+./bin/epagent watch --duration 60s --min-severity medium --sink stdout
+
 # analyze samples
 ./bin/epagent analyze
 
@@ -46,6 +49,7 @@ Create a JSON config and pass it to `collect` with `--config`.
 ## Commands
 ```bash
 epagent collect --once
+epagent watch --min-severity high --sink stdout
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10
