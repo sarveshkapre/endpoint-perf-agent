@@ -7,17 +7,19 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P1 (Selected Next) Add optional key/value labels (`--label k=v`, config labels) for multi-host/multi-service ingestion; propagate labels into alerts and reports.
-  Score: impact high | effort medium | strategic fit high | differentiation low | risk medium | confidence medium
-- [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric.
+- [ ] P1 (Selected) Labels/tags for multi-host + multi-service ingestion: add config `labels` and `--label k=v` (repeatable) for `collect`/`watch`; propagate labels into JSONL samples, `watch` alerts, and `analyze --format ndjson` alerts; include labels in `analyze`/`report` outputs.
+  Score: impact high | effort medium | strategic fit high | differentiation low | risk medium | confidence high
+- [ ] P2 (Selected) Add `--metric cpu|mem|disk|net` include filter for `analyze`/`report` to focus on a subset of metric families without re-collecting.
+  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence medium
+- [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric family.
   Score: impact medium | effort medium | strategic fit medium | differentiation medium | risk medium | confidence medium
-- [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric.
+- [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric family.
   Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Optional SQLite storage mode with retention controls and a migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
-- [ ] P3 Add `--metric` include filter for `analyze`/`report` to focus on a subset of metrics (e.g. only cpu + net).
-  Score: impact low | effort low | strategic fit medium | differentiation low | risk low | confidence medium
-- [ ] P3 Add a lightweight `bench`/`selftest` command to estimate collection overhead (interval jitter, process attribution cost) and validate metrics availability on the host.
+- [ ] P3 Add a lightweight `selftest` command to validate metric availability/permissions on the host and estimate overhead (interval jitter, process attribution cost).
+  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
+- [ ] P3 Add a `redact` mode for outputs (`analyze`/`report`/alerts) to omit or hash `host_id` and labels for easier sharing.
   Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
 - [ ] P3 Improve build noise: investigate/suppress toolchain warnings from dependencies during `go test` on Apple Silicon without hiding real errors.
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
