@@ -571,7 +571,7 @@ func parseRFC3339TimeFlag(name, value string) (time.Time, error) {
 	if value == "" {
 		return time.Time{}, nil
 	}
-	t, err := time.Parse(time.RFC3339, value)
+	t, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("%s must be an RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z): %w", name, err)
 	}

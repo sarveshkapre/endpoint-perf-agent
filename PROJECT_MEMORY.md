@@ -125,6 +125,7 @@
 - `./bin/epagent analyze --in tmp/smoke-time.jsonl --format json --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)
 - `./bin/epagent report --in tmp/smoke-time.jsonl --out - --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)
 - `./bin/epagent analyze --in tmp/smoke-last.jsonl --format json --window 5 --threshold 3 --last 2s` (pass; samples=3)
+- `./bin/epagent analyze --in tmp/smoke-time.jsonl --format text --since 2026-02-09T19:58:24.322408Z` (pass; accepts fractional seconds RFC3339)
 - `gh run list -L 3 --branch main` (pass; `ci`, `secret-scan`, `codeql` succeeded for latest push)
 - `gh run list -L 5 --branch main` (pass; latest `ci`, `secret-scan`, `codeql` runs succeeded for `main` push)
 - `./bin/epagent collect --once --out - --process-attribution=false --metrics cpu,mem | head -n 1` (pass)

@@ -64,6 +64,13 @@ func TestAnalyze_RejectsSinceAfterUntil(t *testing.T) {
 	}
 }
 
+func TestAnalyze_AcceptsFractionalRFC3339Since(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--format", "json", "--window", "5", "--threshold", "3", "--since", "2026-02-09T00:00:01.123Z"}); err != nil {
+		t.Fatalf("runAnalyze: %v", err)
+	}
+}
+
 func TestAnalyze_LastRejectsNegative(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runAnalyze([]string{"--in", in, "--last", "-1s"}); err == nil {
