@@ -104,6 +104,7 @@
 
 ## Verification Evidence
 - `make check` (pass)
+- `gh run list -L 5 --branch main` (pass; latest `ci`, `secret-scan`, `codeql` runs succeeded for `main` push)
 - `./bin/epagent collect --once --out - --process-attribution=false --metrics cpu,mem | head -n 1` (pass)
 - `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink stdout` (pass; emitted 1 alert in that run)
 - `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink syslog --syslog-tag epagent-test` (pass)
