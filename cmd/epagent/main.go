@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -77,32 +78,27 @@ Run "epagent <command> -h" for command-specific flags.`)
 }
 
 func runCollect(args []string) error {
+	cfgPath := findFlagStringValue(args, "config")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+
 	fs := flag.NewFlagSet("collect", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	cfgPath := fs.String("config", "", "Path to config file (JSON)")
-	interval := fs.Duration("interval", 0, "Sampling interval override (e.g. 2s)")
-	duration := fs.Duration("duration", 0, "Total run duration (0 = until interrupted)")
+	_ = fs.String("config", cfgPath, "Path to config file (JSON)")
+	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
+	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
-	out := fs.String("out", "", "Output path override for JSONL")
-	processAttribution := fs.Bool("process-attribution", true, "Capture per-sample top CPU/memory process attribution (can be expensive)")
+	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
+	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(*cfgPath)
-	if err != nil {
-		return err
-	}
-	if *interval > 0 {
-		cfg.Interval = *interval
-	}
-	if *duration > 0 {
-		cfg.Duration = *duration
-	}
-	if *out != "" {
-		cfg.OutputPath = *out
-	}
-	// CLI flag overrides config. Use "--process-attribution=false" to disable.
+	cfg.Interval = *interval
+	cfg.Duration = *duration
+	cfg.OutputPath = *out
 	cfg.ProcessAttribution = *processAttribution
 	if *once {
 		cfg.Duration = 0
@@ -239,19 +235,25 @@ func runAnalyze(args []string) error {
 }
 
 func runWatch(args []string) error {
+	cfgPath := findFlagStringValue(args, "config")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	cfgPath := fs.String("config", "", "Path to config file (JSON)")
-	interval := fs.Duration("interval", 0, "Sampling interval override (e.g. 2s)")
-	duration := fs.Duration("duration", 0, "Total run duration (0 = until interrupted)")
+	_ = fs.String("config", cfgPath, "Path to config file (JSON)")
+	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
+	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
-	window := fs.Int("window", 0, "Rolling window size override")
-	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
+	window := fs.Int("window", cfg.WindowSize, "Rolling window size")
+	threshold := fs.Float64("threshold", cfg.ZScoreThreshold, "Z-score threshold")
 	minSeverity := fs.String("min-severity", "medium", "Minimum severity to emit: low|medium|high|critical")
 	sink := fs.String("sink", "stdout", "Alert sink: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
-	processAttribution := fs.Bool("process-attribution", true, "Capture per-sample top CPU/memory process attribution (can be expensive)")
+	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -271,22 +273,10 @@ func runWatch(args []string) error {
 		return errors.New("cooldown must be greater than or equal to zero")
 	}
 
-	cfg, err := config.Load(*cfgPath)
-	if err != nil {
-		return err
-	}
-	if *interval > 0 {
-		cfg.Interval = *interval
-	}
-	if *duration > 0 {
-		cfg.Duration = *duration
-	}
-	if *window > 0 {
-		cfg.WindowSize = *window
-	}
-	if *threshold > 0 {
-		cfg.ZScoreThreshold = *threshold
-	}
+	cfg.Interval = *interval
+	cfg.Duration = *duration
+	cfg.WindowSize = *window
+	cfg.ZScoreThreshold = *threshold
 	cfg.ProcessAttribution = *processAttribution
 
 	if cfg.Interval <= 0 {
@@ -404,6 +394,25 @@ func runReport(args []string) error {
 	}
 	fmt.Printf("report written to %s\n", *out)
 	return nil
+}
+
+func findFlagStringValue(args []string, name string) string {
+	prefix1 := "-" + name + "="
+	prefix2 := "--" + name + "="
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-"+name || a == "--"+name:
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(a, prefix1):
+			return strings.TrimPrefix(a, prefix1)
+		case strings.HasPrefix(a, prefix2):
+			return strings.TrimPrefix(a, prefix2)
+		}
+	}
+	return ""
 }
 
 func exitErr(err error) {
