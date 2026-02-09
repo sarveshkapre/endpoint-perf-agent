@@ -50,10 +50,59 @@ func TestAnalyze_RejectsUnknownSinkForNDJSON(t *testing.T) {
 	}
 }
 
+func TestAnalyze_RejectsInvalidSince(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--since", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestAnalyze_RejectsSinceAfterUntil(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--since", "2026-02-09T00:00:03Z", "--until", "2026-02-09T00:00:02Z"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestAnalyze_LastRejectsNegative(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--last", "-1s"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestAnalyze_LastCannotCombineSince(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--last", "1s", "--since", "2026-02-09T00:00:01Z"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestAnalyze_LastWorks(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--format", "json", "--window", "5", "--threshold", "3", "--last", "2s"}); err != nil {
+		t.Fatalf("runAnalyze: %v", err)
+	}
+}
+
 func TestReport_WritesToStdout(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runReport([]string{"--in", in, "--out", "-", "--window", "5", "--threshold", "3"}); err != nil {
 		t.Fatalf("runReport: %v", err)
+	}
+}
+
+func TestReport_RejectsInvalidUntil(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runReport([]string{"--in", in, "--out", "-", "--until", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestReport_LastCannotCombineUntil(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runReport([]string{"--in", in, "--out", "-", "--last", "1s", "--until", "2026-02-09T00:00:02Z"}); err == nil {
+		t.Fatalf("expected error")
 	}
 }
 

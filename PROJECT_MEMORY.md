@@ -2,6 +2,23 @@
 
 ## Decision Log
 
+### 2026-02-09 - Add host ID override and time-window filtering for incident-focused analysis
+- Decision:
+  - Add `collect`/`watch` `--host-id` to override `host_id` without editing config.
+  - Add `analyze`/`report` `--since` and `--until` (RFC3339) to filter samples by an incident time window.
+  - Add `analyze`/`report` `--last <duration>` convenience filtering relative to the last sample timestamp in the file.
+- Why: Operations workflows often need (1) consistent host identifiers for multi-host ingestion and (2) quick scoping of analysis/reporting to an incident window without pre-slicing JSONL files.
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/report/sample_filter.go`
+  - Tests: `cmd/epagent/main_test.go`, `internal/report/sample_filter_test.go`
+  - Local smoke:
+    - `./bin/epagent collect --once --out tmp/smoke-time.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host`
+    - `./bin/epagent analyze --in tmp/smoke-time.jsonl --format json --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z`
+    - `./bin/epagent analyze --in tmp/smoke-last.jsonl --format json --window 5 --threshold 3 --last 2s`
+- Commit: (next)
+- Confidence: high
+- Trust label: verified-local
+
 ### 2026-02-09 - Add stdout sample output and NDJSON anomaly emission for offline pipelines
 - Decision:
   - Add `collect --out -` to stream JSONL samples to stdout.
@@ -104,6 +121,10 @@
 
 ## Verification Evidence
 - `make check` (pass)
+- `./bin/epagent collect --once --out tmp/smoke-time.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host` (pass; JSONL includes host_id=smoke-host)
+- `./bin/epagent analyze --in tmp/smoke-time.jsonl --format json --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)
+- `./bin/epagent report --in tmp/smoke-time.jsonl --out - --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)
+- `./bin/epagent analyze --in tmp/smoke-last.jsonl --format json --window 5 --threshold 3 --last 2s` (pass; samples=3)
 - `gh run list -L 5 --branch main` (pass; latest `ci`, `secret-scan`, `codeql` runs succeeded for `main` push)
 - `./bin/epagent collect --once --out - --process-attribution=false --metrics cpu,mem | head -n 1` (pass)
 - `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink stdout` (pass; emitted 1 alert in that run)

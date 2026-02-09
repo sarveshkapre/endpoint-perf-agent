@@ -47,20 +47,27 @@ Create a JSON config and pass it to `collect` with `--config`.
   "process_attribution": true
 }
 ```
+You can override `host_id` at runtime with `--host-id` on `collect` and `watch`.
 
 ## Commands
 ```bash
 epagent collect --once
 epagent collect --once --out -
+epagent collect --once --host-id laptop-01
 epagent collect --duration 60s --metrics cpu,mem
 epagent watch --min-severity high --sink stdout
+epagent watch --duration 60s --host-id laptop-01 --metrics cpu,mem --sink stdout
 epagent watch --duration 60s --metrics cpu,mem --sink syslog
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --format ndjson --sink stdout  # one alert per line
+epagent analyze --in data/metrics.jsonl --since 2026-02-09T00:00:00Z --until 2026-02-09T00:10:00Z
+epagent analyze --in data/metrics.jsonl --last 10m
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10
 epagent report --out endpoint-perf-report.md
 epagent report --min-severity medium --top 20 --out -
+epagent report --in data/metrics.jsonl --since 2026-02-09T00:00:00Z --until 2026-02-09T00:10:00Z --out -
+epagent report --in data/metrics.jsonl --last 10m --out -
 epagent report --out -
 ```
 

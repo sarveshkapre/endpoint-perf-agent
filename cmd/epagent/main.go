@@ -91,6 +91,7 @@ func runCollect(args []string) error {
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
+	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
@@ -101,6 +102,9 @@ func runCollect(args []string) error {
 	cfg.Duration = *duration
 	cfg.OutputPath = *out
 	cfg.ProcessAttribution = *processAttribution
+	if *hostID != "" {
+		cfg.HostID = *hostID
+	}
 	if *metrics != "" {
 		m, err := parseMetricFamiliesCSV(*metrics)
 		if err != nil {
@@ -183,6 +187,9 @@ func runAnalyze(args []string) error {
 	format := fs.String("format", "text", "Output format: text|json|ndjson")
 	minSeverity := fs.String("min-severity", "low", "Minimum severity: low|medium|high|critical")
 	top := fs.Int("top", 0, "Limit to top N anomalies by absolute z-score (0 = no limit)")
+	last := fs.Duration("last", 0, "Analyze only the last duration of samples (relative to the file's last sample timestamp)")
+	sinceStr := fs.String("since", "", "Include samples at or after this RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z)")
+	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
 	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	if err := fs.Parse(args); err != nil {
@@ -196,6 +203,12 @@ func runAnalyze(args []string) error {
 	}
 	if *top < 0 {
 		return errors.New("top must be greater than or equal to zero")
+	}
+	if *last < 0 {
+		return errors.New("last must be greater than or equal to zero")
+	}
+	if *last > 0 && (*sinceStr != "" || *untilStr != "") {
+		return errors.New("cannot combine --last with --since/--until")
 	}
 
 	cfg, err := config.Load("")
@@ -220,6 +233,33 @@ func runAnalyze(args []string) error {
 	samples, err := storage.ReadSamples(inputPath)
 	if err != nil {
 		return err
+	}
+
+	if *last > 0 && len(samples) > 0 {
+		maxTS := samples[0].Timestamp
+		for _, s := range samples[1:] {
+			if s.Timestamp.After(maxTS) {
+				maxTS = s.Timestamp
+			}
+		}
+		since := maxTS.Add(-*last)
+		samples, err = report.FilterSamplesByTime(samples, since, maxTS)
+		if err != nil {
+			return err
+		}
+	} else {
+		since, err := parseRFC3339TimeFlag("since", *sinceStr)
+		if err != nil {
+			return err
+		}
+		until, err := parseRFC3339TimeFlag("until", *untilStr)
+		if err != nil {
+			return err
+		}
+		samples, err = report.FilterSamplesByTime(samples, since, until)
+		if err != nil {
+			return err
+		}
 	}
 
 	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
@@ -291,6 +331,7 @@ func runWatch(args []string) error {
 	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
+	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	window := fs.Int("window", cfg.WindowSize, "Rolling window size")
 	threshold := fs.Float64("threshold", cfg.ZScoreThreshold, "Z-score threshold")
 	minSeverity := fs.String("min-severity", "medium", "Minimum severity to emit: low|medium|high|critical")
@@ -323,6 +364,9 @@ func runWatch(args []string) error {
 	cfg.WindowSize = *window
 	cfg.ZScoreThreshold = *threshold
 	cfg.ProcessAttribution = *processAttribution
+	if *hostID != "" {
+		cfg.HostID = *hostID
+	}
 	if *metrics != "" {
 		m, err := parseMetricFamiliesCSV(*metrics)
 		if err != nil {
@@ -412,6 +456,9 @@ func runReport(args []string) error {
 	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
 	minSeverity := fs.String("min-severity", "low", "Minimum severity: low|medium|high|critical")
 	top := fs.Int("top", 0, "Limit to top N anomalies by absolute z-score (0 = no limit)")
+	last := fs.Duration("last", 0, "Report only the last duration of samples (relative to the file's last sample timestamp)")
+	sinceStr := fs.String("since", "", "Include samples at or after this RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z)")
+	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -423,6 +470,12 @@ func runReport(args []string) error {
 	}
 	if *top < 0 {
 		return errors.New("top must be greater than or equal to zero")
+	}
+	if *last < 0 {
+		return errors.New("last must be greater than or equal to zero")
+	}
+	if *last > 0 && (*sinceStr != "" || *untilStr != "") {
+		return errors.New("cannot combine --last with --since/--until")
 	}
 
 	cfg, err := config.Load("")
@@ -447,6 +500,33 @@ func runReport(args []string) error {
 	samples, err := storage.ReadSamples(inputPath)
 	if err != nil {
 		return err
+	}
+
+	if *last > 0 && len(samples) > 0 {
+		maxTS := samples[0].Timestamp
+		for _, s := range samples[1:] {
+			if s.Timestamp.After(maxTS) {
+				maxTS = s.Timestamp
+			}
+		}
+		since := maxTS.Add(-*last)
+		samples, err = report.FilterSamplesByTime(samples, since, maxTS)
+		if err != nil {
+			return err
+		}
+	} else {
+		since, err := parseRFC3339TimeFlag("since", *sinceStr)
+		if err != nil {
+			return err
+		}
+		until, err := parseRFC3339TimeFlag("until", *untilStr)
+		if err != nil {
+			return err
+		}
+		samples, err = report.FilterSamplesByTime(samples, since, until)
+		if err != nil {
+			return err
+		}
 	}
 
 	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
@@ -484,6 +564,18 @@ func findFlagStringValue(args []string, name string) string {
 		}
 	}
 	return ""
+}
+
+func parseRFC3339TimeFlag(name, value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%s must be an RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z): %w", name, err)
+	}
+	return t, nil
 }
 
 func exitErr(err error) {

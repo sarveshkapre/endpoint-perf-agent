@@ -5,6 +5,9 @@
 - Added CLI commands and JSONL storage.
 - `analyze --format json` for machine-readable output.
 - `report --out -` to write Markdown to stdout.
+- `collect`/`watch` `--host-id` to override `host_id` without editing config.
+- `analyze`/`report` `--since` and `--until` to restrict analysis to a time window.
+- `analyze`/`report` `--last <duration>` to quickly focus on the tail end of a sample file.
 - Baseline summaries (mean/stddev/min/max) in Markdown report and JSON output.
 - Robust sample handling (timestamp sorting, tolerate blank lines) and clearer explanations.
 - `--min-severity` and `--top` filtering for `analyze` and `report`.

@@ -6,5 +6,5 @@
 
 ## Next
 - Optional SQLite storage
-- Alert output formats (JSON, syslog)
+- Labels/tags for multi-host and multi-service ingestion (propagate into alerts and reports)
 - Static-threshold and percentile-based alert rules

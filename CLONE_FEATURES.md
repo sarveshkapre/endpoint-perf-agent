@@ -7,20 +7,14 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P1 (Selected) Add `--since`/`--until` time-range filtering to `analyze`/`report` to focus analysis on incident windows.
-  Score: impact high | effort medium | strategic fit high | differentiation low | risk low | confidence high
-- [ ] P1 (Selected) Add `collect`/`watch` `--host-id` override to simplify multi-host ingestion and ad-hoc runs without config edits.
-  Score: impact high | effort low | strategic fit high | differentiation low | risk low | confidence high
-- [ ] P2 Add optional key/value labels (`--label k=v`, config labels) for multi-host/multi-service ingestion; propagate labels into alerts and reports.
-  Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P1 (Selected Next) Add optional key/value labels (`--label k=v`, config labels) for multi-host/multi-service ingestion; propagate labels into alerts and reports.
+  Score: impact high | effort medium | strategic fit high | differentiation low | risk medium | confidence medium
 - [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric.
   Score: impact medium | effort medium | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric.
   Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Optional SQLite storage mode with retention controls and a migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
-- [ ] P3 Add `--last <duration>` convenience filtering (syntactic sugar for `--since -<duration>`) to `analyze`/`report`.
-  Score: impact medium | effort low | strategic fit medium | differentiation low | risk low | confidence medium
 - [ ] P3 Add `--metric` include filter for `analyze`/`report` to focus on a subset of metrics (e.g. only cpu + net).
   Score: impact low | effort low | strategic fit medium | differentiation low | risk low | confidence medium
 - [ ] P3 Add a lightweight `bench`/`selftest` command to estimate collection overhead (interval jitter, process attribution cost) and validate metrics availability on the host.
@@ -29,6 +23,10 @@
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
 ## Implemented
+- [x] 2026-02-09: Added `collect`/`watch` `--host-id` override to simplify multi-host ingestion and ad-hoc runs without config edits.
+  Evidence: `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`, `make check`.
+- [x] 2026-02-09: Added `analyze`/`report` time window filtering via `--since`/`--until` (RFC3339) and `--last <duration>` convenience filtering.
+  Evidence: `cmd/epagent/main.go`, `internal/report/sample_filter.go`, `cmd/epagent/main_test.go`, `internal/report/sample_filter_test.go`, `README.md`, `docs/CHANGELOG.md`, `make check`.
 - [x] 2026-02-09: Added `AGENTS.md` operating contract to the repository root and updated the clone tracker with bounded market scan notes.
   Evidence: `AGENTS.md`, `CLONE_FEATURES.md`.
 - [x] 2026-02-09: Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
