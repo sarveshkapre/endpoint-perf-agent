@@ -2,6 +2,22 @@
 
 ## Decision Log
 
+### 2026-02-09 - Add stdout sample output and NDJSON anomaly emission for offline pipelines
+- Decision:
+  - Add `collect --out -` to stream JSONL samples to stdout.
+  - Add `analyze --format ndjson` with `--sink stdout|syslog` to emit one alert per anomaly as JSON for easy piping into log pipelines.
+- Why: CLI-first operators often want to pipe data without managing files; offline anomaly output needs a streaming-friendly format for downstream tooling.
+- Evidence:
+  - Code: `internal/storage/storage.go`, `cmd/epagent/main.go`
+  - Tests: `internal/storage/storage_test.go`, `cmd/epagent/main_test.go`
+  - Local smoke:
+    - `./bin/epagent collect --once --out - --process-attribution=false --metrics cpu,mem | head -n 1`
+    - `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink stdout`
+    - `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink syslog --syslog-tag epagent-test`
+- Commit: `8b1f21d`
+- Confidence: high
+- Trust label: verified-local
+
 ### 2026-02-09 - Add metric family allow-listing and persist per-sample collection scope
 - Decision: Add `enabled_metrics` (config) and `--metrics` (collect/watch) to allow-list metric families (cpu/mem/disk/net), persist `metric_families` in each sample, and make `analyze`/`report` and `watch` respect what was collected.
 - Why: Production hosts vary; being able to disable noisy or expensive collectors improves usability and reduces overhead while keeping analysis correct for partial datasets.
@@ -88,6 +104,9 @@
 
 ## Verification Evidence
 - `make check` (pass)
+- `./bin/epagent collect --once --out - --process-attribution=false --metrics cpu,mem | head -n 1` (pass)
+- `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink stdout` (pass; emitted 1 alert in that run)
+- `./bin/epagent analyze --in tmp/anom.jsonl --window 5 --threshold 2.5 --format ndjson --sink syslog --syslog-tag epagent-test` (pass)
 - `./bin/epagent collect --once --out tmp/smoke-metrics.XXXXXX.jsonl --process-attribution=false --metrics cpu,mem` (pass)
 - `./bin/epagent analyze --in tmp/smoke-metrics.XXXXXX.jsonl --format json --window 5 --threshold 3` (pass)
 - `./bin/epagent report --in tmp/smoke-metrics.XXXXXX.jsonl --out tmp/report.md --min-severity low --window 5 --threshold 3` (pass)
