@@ -51,11 +51,13 @@ Create a JSON config and pass it to `collect` with `--config`.
 ## Commands
 ```bash
 epagent collect --once
+epagent collect --once --out -
 epagent collect --duration 60s --metrics cpu,mem
 epagent watch --min-severity high --sink stdout
 epagent watch --duration 60s --metrics cpu,mem --sink syslog
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
+epagent analyze --in data/metrics.jsonl --format ndjson --sink stdout  # one alert per line
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10
 epagent report --out endpoint-perf-report.md
 epagent report --min-severity medium --top 20 --out -

@@ -5,22 +5,30 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
 
 type Writer struct {
-	file   *os.File
+	closer io.Closer
 	writer *bufio.Writer
 }
 
 func NewWriter(path string) (*Writer, error) {
+	if path == "-" {
+		return NewWriterWithWriter(os.Stdout), nil
+	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{file: file, writer: bufio.NewWriter(file)}, nil
+	return &Writer{closer: file, writer: bufio.NewWriter(file)}, nil
+}
+
+func NewWriterWithWriter(w io.Writer) *Writer {
+	return &Writer{writer: bufio.NewWriter(w)}
 }
 
 func (w *Writer) Write(sample collector.MetricSample) error {
@@ -38,8 +46,8 @@ func (w *Writer) Close() error {
 	if w.writer != nil {
 		_ = w.writer.Flush()
 	}
-	if w.file != nil {
-		return w.file.Close()
+	if w.closer != nil {
+		return w.closer.Close()
 	}
 	return nil
 }

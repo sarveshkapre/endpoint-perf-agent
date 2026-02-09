@@ -36,6 +36,20 @@ func TestAnalyze_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestAnalyze_NDJSONOutput(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--format", "ndjson", "--sink", "stdout", "--window", "5", "--threshold", "3"}); err != nil {
+		t.Fatalf("runAnalyze: %v", err)
+	}
+}
+
+func TestAnalyze_RejectsUnknownSinkForNDJSON(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--format", "ndjson", "--sink", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestReport_WritesToStdout(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runReport([]string{"--in", in, "--out", "-", "--window", "5", "--threshold", "3"}); err != nil {

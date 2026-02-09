@@ -180,9 +180,11 @@ func runAnalyze(args []string) error {
 	in := fs.String("in", "", "Input JSONL path")
 	window := fs.Int("window", 0, "Rolling window size override")
 	threshold := fs.Float64("threshold", 0, "Z-score threshold override")
-	format := fs.String("format", "text", "Output format: text|json")
+	format := fs.String("format", "text", "Output format: text|json|ndjson")
 	minSeverity := fs.String("min-severity", "low", "Minimum severity: low|medium|high|critical")
 	top := fs.Int("top", 0, "Limit to top N anomalies by absolute z-score (0 = no limit)")
+	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
+	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -237,8 +239,42 @@ func runAnalyze(args []string) error {
 		}
 		fmt.Println(string(payload))
 		return nil
+	case "ndjson":
+		var alertSink alert.Sink
+		switch *sink {
+		case "stdout":
+			alertSink = alert.NewStdoutSink(os.Stdout)
+		case "syslog":
+			s, err := alert.NewSyslogSink(*syslogTag)
+			if err != nil {
+				return err
+			}
+			alertSink = s
+			defer alertSink.Close()
+		default:
+			return fmt.Errorf("unknown sink: %s (expected stdout|syslog)", *sink)
+		}
+
+		for _, a := range result.Anomalies {
+			if err := alertSink.Emit(context.Background(), alert.Alert{
+				Timestamp:     a.Timestamp,
+				HostID:        result.HostID,
+				Metric:        a.Name,
+				Value:         a.Value,
+				Mean:          a.Mean,
+				Stddev:        a.Stddev,
+				ZScore:        a.ZScore,
+				Severity:      a.Severity,
+				Explanation:   a.Explanation,
+				TopCPUProcess: a.TopCPUProcess,
+				TopMemProcess: a.TopMemProcess,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
-		return fmt.Errorf("unknown format: %s (expected text|json)", *format)
+		return fmt.Errorf("unknown format: %s (expected text|json|ndjson)", *format)
 	}
 }
 

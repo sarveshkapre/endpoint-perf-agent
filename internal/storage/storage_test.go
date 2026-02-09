@@ -1,9 +1,13 @@
 package storage
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
 
 func TestReadSamplesSkipsBlankLines(t *testing.T) {
@@ -50,5 +54,29 @@ not-json
 	}
 	if !strings.Contains(err.Error(), "line 2") {
 		t.Fatalf("expected line number in error, got: %v", err)
+	}
+}
+
+func TestWriterWithWriterWritesJSONL(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriterWithWriter(&buf)
+
+	sample := collector.MetricSample{
+		Timestamp:      time.Date(2026, 2, 9, 0, 0, 0, 0, time.UTC),
+		HostID:         "test",
+		CPUPercent:     1,
+		MemUsedPercent: 2,
+	}
+	if err := w.Write(sample); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if !strings.HasSuffix(buf.String(), "\n") {
+		t.Fatalf("expected newline-terminated JSONL")
+	}
+	if !strings.Contains(buf.String(), `"cpu_percent":1`) {
+		t.Fatalf("expected payload to include cpu_percent, got: %s", buf.String())
 	}
 }

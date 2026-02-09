@@ -7,10 +7,6 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P1 Add offline alert sinks for `analyze` results: `--format ndjson` (one alert per line) and optional syslog emission for piping into existing ops workflows.
-  Score: impact high | effort medium | strategic fit high | differentiation medium | risk medium | confidence medium
-- [ ] P1 Support `collect --out -` (stdout JSONL) for easy piping/testing and to reduce filesystem coupling.
-  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence high
 - [ ] P2 Add `--since`/`--until` time-range filtering to `analyze`/`report` for focusing on incidents.
   Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
 - [ ] P2 Add configurable static and percentile-based alert rules (in addition to z-score), selectable per metric.
@@ -29,6 +25,10 @@
   Evidence: `internal/config/config.go`, `internal/collector/collector.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
 - [x] 2026-02-09: Added metric family allow-listing (`enabled_metrics` / `--metrics`) and persisted per-sample metric family metadata so `analyze`/`report` can respect collection scope.
   Evidence: `internal/config/config.go`, `internal/collector/collector.go`, `internal/report/report.go`, `internal/watch/engine.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
+- [x] 2026-02-09: Added `collect --out -` to stream JSONL samples to stdout.
+  Evidence: `internal/storage/storage.go`, `internal/storage/storage_test.go`, `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`.
+- [x] 2026-02-09: Added `analyze --format ndjson` plus `--sink stdout|syslog` to emit one JSON alert per anomaly.
+  Evidence: `cmd/epagent/main.go`, `cmd/epagent/main_test.go`, `README.md`, `docs/CHANGELOG.md`.
 - [x] 2026-02-09: Added `watch` command to stream anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown and optional JSONL sample output.
   Evidence: `cmd/epagent/main.go`, `internal/watch/engine.go`, `internal/watch/run.go`, `internal/alert/alert.go`, `internal/alert/syslog_unix.go`, `internal/alert/syslog_windows.go`.
 - [x] 2026-02-09: Fixed `watch` panic when `--out` is unset (typed-nil writer assigned to interface).
@@ -54,8 +54,9 @@
 - Line-numbered JSONL parse errors materially reduce diagnosis time for corrupted collection files.
 - Market scan (bounded, untrusted external sources): adjacent tools typically provide a streaming/daemon mode and alert sinks beyond file-based analysis, plus knobs to tune overhead (enable/disable collectors, process monitoring optional).
   Sources:
-  - Netdata agent health/alerts: https://learn.netdata.cloud/docs/alerting/health-configuration-reference
-  - Prometheus node_exporter metrics collector model: https://github.com/prometheus/node_exporter
+  - Netdata collector configuration: https://learn.netdata.cloud/docs/collecting-metrics/collectors-configuration
+  - Netdata performance optimization guide: https://learn.netdata.cloud/docs/netdata-agent/configuration/performance-optimization
+  - Prometheus node_exporter collector enable/disable flags: https://github.com/prometheus/node_exporter
   - Glances CLI + exporters (local-first, multi-output): https://nicolargo.github.io/glances/
 
 ## Notes
