@@ -7,14 +7,24 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P2 Add `--since`/`--until` time-range filtering to `analyze`/`report` for focusing on incidents.
+- [ ] P1 (Selected) Add `--since`/`--until` time-range filtering to `analyze`/`report` to focus analysis on incident windows.
+  Score: impact high | effort medium | strategic fit high | differentiation low | risk low | confidence high
+- [ ] P1 (Selected) Add `collect`/`watch` `--host-id` override to simplify multi-host ingestion and ad-hoc runs without config edits.
+  Score: impact high | effort low | strategic fit high | differentiation low | risk low | confidence high
+- [ ] P2 Add optional key/value labels (`--label k=v`, config labels) for multi-host/multi-service ingestion; propagate labels into alerts and reports.
   Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
-- [ ] P2 Add configurable static and percentile-based alert rules (in addition to z-score), selectable per metric.
+- [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric.
+  Score: impact medium | effort medium | strategic fit medium | differentiation medium | risk medium | confidence medium
+- [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric.
   Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
-- [ ] P2 Optional SQLite storage mode with retention controls and migration path from JSONL.
+- [ ] P2 Optional SQLite storage mode with retention controls and a migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
-- [ ] P3 Add metric/host labeling controls (`--host-id`, and optional key/value labels) to improve multi-host ingestion without external systems.
+- [ ] P3 Add `--last <duration>` convenience filtering (syntactic sugar for `--since -<duration>`) to `analyze`/`report`.
   Score: impact medium | effort low | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P3 Add `--metric` include filter for `analyze`/`report` to focus on a subset of metrics (e.g. only cpu + net).
+  Score: impact low | effort low | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P3 Add a lightweight `bench`/`selftest` command to estimate collection overhead (interval jitter, process attribution cost) and validate metrics availability on the host.
+  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
 - [ ] P3 Improve build noise: investigate/suppress toolchain warnings from dependencies during `go test` on Apple Silicon without hiding real errors.
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
@@ -52,12 +62,16 @@
 - Process attribution substantially improves first-pass triage, but can bias toward transient short-lived processes; follow-up benchmarking is needed on process-dense hosts.
 - Detector normalization must be reflected in user-visible output; otherwise operations teams can misinterpret baselines and thresholds.
 - Line-numbered JSONL parse errors materially reduce diagnosis time for corrupted collection files.
-- Market scan (bounded, untrusted external sources): adjacent tools typically provide a streaming/daemon mode and alert sinks beyond file-based analysis, plus knobs to tune overhead (enable/disable collectors, process monitoring optional).
+- Market scan (bounded, untrusted external sources): adjacent tools consistently emphasize (1) enabling/disabling collectors/scrapers to tune overhead, (2) tagging/labeling for multi-host and downstream routing, and (3) interval controls and jitter.
   Sources:
   - Netdata collector configuration: https://learn.netdata.cloud/docs/collecting-metrics/collectors-configuration
   - Netdata performance optimization guide: https://learn.netdata.cloud/docs/netdata-agent/configuration/performance-optimization
   - Prometheus node_exporter collector enable/disable flags: https://github.com/prometheus/node_exporter
   - Glances CLI + exporters (local-first, multi-output): https://nicolargo.github.io/glances/
+  - OpenTelemetry Collector hostmetrics receiver (collection interval + enabled scrapers): https://pkg.go.dev/go.opentelemetry.io/collector/receiver/hostmetricsreceiver
+  - OpenTelemetry Collector configuration overview (receivers enabled via pipelines): https://opentelemetry.io/docs/collector/configuration/
+  - Telegraf configuration (intervals + tags + plugin filtering): https://docs.influxdata.com/telegraf/v1/configuration/
+  - Elastic Metricbeat module config (period + fields + tags): https://www.elastic.co/guide/en/beats/metricbeat/current/configuration-metricbeat.html
 
 ## Notes
 - This file is maintained by the autonomous clone loop.
