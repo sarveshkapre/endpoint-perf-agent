@@ -2,6 +2,31 @@
 
 ## Decision Log
 
+### 2026-02-09 - Add metric family allow-listing and persist per-sample collection scope
+- Decision: Add `enabled_metrics` (config) and `--metrics` (collect/watch) to allow-list metric families (cpu/mem/disk/net), persist `metric_families` in each sample, and make `analyze`/`report` and `watch` respect what was collected.
+- Why: Production hosts vary; being able to disable noisy or expensive collectors improves usability and reduces overhead while keeping analysis correct for partial datasets.
+- Evidence:
+  - Code: `internal/config/config.go`, `internal/collector/collector.go`, `internal/report/report.go`, `internal/watch/engine.go`, `cmd/epagent/main.go`
+  - Tests: `internal/config/config_test.go`, `internal/report/report_test.go`, `internal/watch/engine_test.go`
+  - Local smoke:
+    - `./bin/epagent collect --once --out tmp/smoke-metrics.XXXXXX.jsonl --process-attribution=false --metrics cpu,mem`
+    - `./bin/epagent analyze --in tmp/smoke-metrics.XXXXXX.jsonl --format json --window 5 --threshold 3`
+    - `./bin/epagent report --in tmp/smoke-metrics.XXXXXX.jsonl --out tmp/report.md --min-severity low --window 5 --threshold 3`
+- Commit: `e5235ea`, `8f4837e`
+- Confidence: high
+- Trust label: verified-local
+
+### 2026-02-09 - Fix `watch` optional sample writer typed-nil panic
+- Decision: Ensure `watch` does not panic when `--out` is unset by (1) passing a nil interface from the CLI and (2) hardening `Runner` to treat typed-nil interface values as nil.
+- Why: `watch` should be safe by default; optional sample output must never crash the agent.
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/watch/run.go`
+  - Tests: `internal/watch/run_test.go`
+  - Local smoke: `./bin/epagent watch --duration 2s --interval 1s --metrics cpu,mem --process-attribution=false --sink stdout --min-severity critical > tmp/watch-metrics.ndjson`
+- Commit: `e5235ea`, `8f4837e`
+- Confidence: high
+- Trust label: verified-local
+
 ### 2026-02-09 - Add process attribution context to anomaly outputs
 - Decision: Capture top CPU and top memory process during collection and propagate this context to anomaly records in `analyze` and `report` output.
 - Why: Metric-only anomalies slow triage. Process context lets operators quickly identify likely offenders without extra tooling.
@@ -63,6 +88,10 @@
 
 ## Verification Evidence
 - `make check` (pass)
+- `./bin/epagent collect --once --out tmp/smoke-metrics.XXXXXX.jsonl --process-attribution=false --metrics cpu,mem` (pass)
+- `./bin/epagent analyze --in tmp/smoke-metrics.XXXXXX.jsonl --format json --window 5 --threshold 3` (pass)
+- `./bin/epagent report --in tmp/smoke-metrics.XXXXXX.jsonl --out tmp/report.md --min-severity low --window 5 --threshold 3` (pass)
+- `./bin/epagent watch --duration 2s --interval 1s --metrics cpu,mem --process-attribution=false --sink stdout --min-severity critical > tmp/watch-metrics.ndjson` (pass; 0 alerts emitted in that run)
 - `./bin/epagent collect --once --out tmp/smoke-metrics.jsonl --process-attribution=false` (pass)
 - `./bin/epagent analyze --in tmp/smoke-metrics.jsonl --format json --window 5 --threshold 3 --min-severity low` (pass)
 - `./bin/epagent report --in tmp/smoke-metrics.jsonl --out tmp/report.md --min-severity low` (pass)
