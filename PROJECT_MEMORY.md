@@ -65,3 +65,4 @@
 - `./bin/epagent analyze --in tmp/smoke-metrics.jsonl --format json --window 5 --threshold 3 --min-severity low` (pass)
 - `./bin/epagent report --in tmp/smoke-metrics.jsonl --out tmp/report.md --min-severity low` (pass)
 - `./bin/epagent watch --duration 5s --interval 1s --min-severity medium --sink stdout --process-attribution=false --out tmp/watch-metrics.jsonl` (pass; 0 alerts emitted in that run)
+- `gh run list -L 5` (pass; latest `ci`, `secret-scan`, `codeql` runs succeeded for `main` push)
