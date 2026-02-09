@@ -35,11 +35,12 @@ type MetricSample struct {
 }
 
 type Sampler struct {
-	hostID string
+	hostID             string
+	processAttribution bool
 }
 
-func NewSampler(hostID string) *Sampler {
-	return &Sampler{hostID: hostID}
+func NewSampler(hostID string, processAttribution bool) *Sampler {
+	return &Sampler{hostID: hostID, processAttribution: processAttribution}
 }
 
 func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
@@ -88,7 +89,11 @@ func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
 		txBytes = netCounters[0].BytesSent
 	}
 
-	topCPUProcess, topMemProcess := sampleTopProcesses(ctx)
+	var topCPUProcess *ProcessAttribution
+	var topMemProcess *ProcessAttribution
+	if s.processAttribution {
+		topCPUProcess, topMemProcess = sampleTopProcesses(ctx)
+	}
 
 	return MetricSample{
 		Timestamp:       time.Now().UTC(),

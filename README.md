@@ -38,7 +38,8 @@ Create a JSON config and pass it to `collect` with `--config`.
   "window_size": 30,
   "zscore_threshold": 3.0,
   "output_path": "data/metrics.jsonl",
-  "host_id": "laptop-01"
+  "host_id": "laptop-01",
+  "process_attribution": true
 }
 ```
 

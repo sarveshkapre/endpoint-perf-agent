@@ -76,6 +76,7 @@ func runCollect(args []string) error {
 	duration := fs.Duration("duration", 0, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", "", "Output path override for JSONL")
+	processAttribution := fs.Bool("process-attribution", true, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -93,6 +94,8 @@ func runCollect(args []string) error {
 	if *out != "" {
 		cfg.OutputPath = *out
 	}
+	// CLI flag overrides config. Use "--process-attribution=false" to disable.
+	cfg.ProcessAttribution = *processAttribution
 	if *once {
 		cfg.Duration = 0
 	}
@@ -118,7 +121,7 @@ func runCollect(args []string) error {
 	}
 	defer writer.Close()
 
-	sampler := collector.NewSampler(cfg.HostID)
+	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 

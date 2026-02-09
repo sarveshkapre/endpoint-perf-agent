@@ -29,31 +29,34 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval        time.Duration `json:"-"`
-	Duration        time.Duration `json:"-"`
-	WindowSize      int           `json:"window_size"`
-	ZScoreThreshold float64       `json:"zscore_threshold"`
-	OutputPath      string        `json:"output_path"`
-	HostID          string        `json:"host_id"`
+	Interval           time.Duration `json:"-"`
+	Duration           time.Duration `json:"-"`
+	WindowSize         int           `json:"window_size"`
+	ZScoreThreshold    float64       `json:"zscore_threshold"`
+	OutputPath         string        `json:"output_path"`
+	HostID             string        `json:"host_id"`
+	ProcessAttribution bool          `json:"process_attribution"`
 }
 
 type fileConfig struct {
-	Interval        Duration `json:"interval"`
-	Duration        Duration `json:"duration"`
-	WindowSize      int      `json:"window_size"`
-	ZScoreThreshold float64  `json:"zscore_threshold"`
-	OutputPath      string   `json:"output_path"`
-	HostID          string   `json:"host_id"`
+	Interval           Duration `json:"interval"`
+	Duration           Duration `json:"duration"`
+	WindowSize         int      `json:"window_size"`
+	ZScoreThreshold    float64  `json:"zscore_threshold"`
+	OutputPath         string   `json:"output_path"`
+	HostID             string   `json:"host_id"`
+	ProcessAttribution *bool    `json:"process_attribution"`
 }
 
 func Default() Config {
 	return Config{
-		Interval:        5 * time.Second,
-		Duration:        0,
-		WindowSize:      30,
-		ZScoreThreshold: 3.0,
-		OutputPath:      filepath.Join("data", "metrics.jsonl"),
-		HostID:          "",
+		Interval:           5 * time.Second,
+		Duration:           0,
+		WindowSize:         30,
+		ZScoreThreshold:    3.0,
+		OutputPath:         filepath.Join("data", "metrics.jsonl"),
+		HostID:             "",
+		ProcessAttribution: true,
 	}
 }
 
@@ -87,6 +90,9 @@ func Load(path string) (Config, error) {
 	}
 	if fc.HostID != "" {
 		cfg.HostID = fc.HostID
+	}
+	if fc.ProcessAttribution != nil {
+		cfg.ProcessAttribution = *fc.ProcessAttribution
 	}
 	return cfg, nil
 }

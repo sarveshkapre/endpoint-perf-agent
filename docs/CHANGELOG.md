@@ -13,3 +13,4 @@
 - Normalized analysis window/threshold values to detector-safe minimums in output (`window>=5`, `threshold>0`).
 - Added stricter CLI validation for negative `--window`, `--threshold`, and `--top` values.
 - Improved JSONL parse errors with line numbers for faster corruption diagnosis.
+- Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
