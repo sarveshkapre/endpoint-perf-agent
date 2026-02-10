@@ -166,6 +166,7 @@
 - `./bin/epagent analyze --in tmp/epagent-smoke.jsonl --format json --window 5 --threshold 3 --redact omit` (pass; host_id/labels omitted)
 - `./bin/epagent report --in tmp/epagent-smoke.jsonl --out - --window 5 --threshold 3 --redact hash` (pass; host_id/labels hashed)
 - `./bin/epagent watch --duration 2s --interval 1s --process-attribution=false --metrics cpu,mem --sink stdout --min-severity critical --redact omit > tmp/watch-smoke.ndjson` (pass)
+- `gh run list -L 6 --branch main` (pass; external; shows `ci`, `secret-scan`, `codeql` succeeded for latest `main` push)
 - `./bin/epagent collect --once --out tmp/smoke-labels.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke` (pass; JSONL includes labels)
 - `head -n 1 tmp/smoke-labels.jsonl` (pass; shows `"labels":{...}`)
 - `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3` (pass; includes `labels` in JSON output)
