@@ -2,6 +2,24 @@
 
 ## Decision Log
 
+### 2026-02-10 - Add labels for ingestion routing and metric-family output filtering
+- Decision:
+  - Add config `labels` and CLI `--label k=v` (repeatable) for `collect`/`watch`, persisted in JSONL samples and propagated to alerts and analysis/report outputs.
+  - Add `analyze`/`report` `--metric cpu|mem|disk|net` (repeatable) to filter output by metric family without re-collecting.
+- Why: Real-world usage commonly needs (1) stable dimensions for multi-host/multi-service routing and (2) the ability to focus reports/alerts on a subset of metric families during an incident.
+- Evidence:
+  - Code: `internal/config/config.go`, `cmd/epagent/main.go`, `internal/collector/collector.go`, `internal/anomaly/anomaly.go`, `internal/alert/alert.go`, `internal/watch/engine.go`, `internal/report/report.go`, `internal/report/metric_family_filter.go`
+  - Tests: `internal/config/config_test.go`, `internal/report/report_test.go`, `internal/report/metric_family_filter_test.go`, `internal/watch/engine_test.go`, `cmd/epagent/main_test.go`
+  - Local smoke:
+    - `./bin/epagent collect --once --out tmp/smoke-labels.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke`
+    - `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3`
+    - `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3 --metric cpu`
+    - `./bin/epagent analyze --in tmp/anom-labels.jsonl --format ndjson --sink stdout --window 5 --threshold 2.5 --metric cpu`
+    - `./bin/epagent report --in tmp/anom-labels.jsonl --out - --window 5 --threshold 2.5 --metric cpu`
+- Commit: `bdf23c7`
+- Confidence: high
+- Trust label: verified-local
+
 ### 2026-02-09 - Add host ID override and time-window filtering for incident-focused analysis
 - Decision:
   - Add `collect`/`watch` `--host-id` to override `host_id` without editing config.
@@ -121,6 +139,13 @@
 
 ## Verification Evidence
 - `make check` (pass)
+- `make check` (pass; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
+- `./bin/epagent collect --once --out tmp/smoke-labels.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke` (pass; JSONL includes labels)
+- `head -n 1 tmp/smoke-labels.jsonl` (pass; shows `"labels":{...}`)
+- `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3` (pass; includes `labels` in JSON output)
+- `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3 --metric cpu` (pass; filtered output excludes mem/disk/net)
+- `./bin/epagent analyze --in tmp/anom-labels.jsonl --format ndjson --sink stdout --window 5 --threshold 2.5 --metric cpu | head -n 1` (pass; emitted 1 alert with `labels`)
+- `./bin/epagent report --in tmp/anom-labels.jsonl --out - --window 5 --threshold 2.5 --metric cpu | head -n 30` (pass; includes labels + filtered baselines)
 - `./bin/epagent collect --once --out tmp/smoke-time.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host` (pass; JSONL includes host_id=smoke-host)
 - `./bin/epagent analyze --in tmp/smoke-time.jsonl --format json --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)
 - `./bin/epagent report --in tmp/smoke-time.jsonl --out - --window 5 --threshold 3 --since 2000-01-01T00:00:00Z --until 2100-01-01T00:00:00Z` (pass)

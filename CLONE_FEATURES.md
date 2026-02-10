@@ -7,10 +7,6 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P1 (Selected) Labels/tags for multi-host + multi-service ingestion: add config `labels` and `--label k=v` (repeatable) for `collect`/`watch`; propagate labels into JSONL samples, `watch` alerts, and `analyze --format ndjson` alerts; include labels in `analyze`/`report` outputs.
-  Score: impact high | effort medium | strategic fit high | differentiation low | risk medium | confidence high
-- [ ] P2 (Selected) Add `--metric cpu|mem|disk|net` include filter for `analyze`/`report` to focus on a subset of metric families without re-collecting.
-  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence medium
 - [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric family.
   Score: impact medium | effort medium | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric family.
@@ -25,6 +21,10 @@
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
 ## Implemented
+- [x] 2026-02-10: Added config `labels` and `collect`/`watch` `--label k=v` (repeatable) to tag samples; labels propagate into JSONL samples, alerts, and analysis/report outputs (including per-anomaly labels).
+  Evidence: `internal/config/config.go`, `cmd/epagent/main.go`, `internal/collector/collector.go`, `internal/watch/engine.go`, `internal/alert/alert.go`, `internal/anomaly/anomaly.go`, `internal/report/report.go`, `make check`.
+- [x] 2026-02-10: Added `analyze`/`report` `--metric cpu|mem|disk|net` (repeatable) to filter output by metric family without re-collecting.
+  Evidence: `cmd/epagent/main.go`, `internal/report/metric_family_filter.go`, `internal/report/metric_family_filter_test.go`, `README.md`, `docs/CHANGELOG.md`, `make check`.
 - [x] 2026-02-09: Added `collect`/`watch` `--host-id` override to simplify multi-host ingestion and ad-hoc runs without config edits.
   Evidence: `cmd/epagent/main.go`, `README.md`, `docs/CHANGELOG.md`, `make check`.
 - [x] 2026-02-09: Added `analyze`/`report` time window filtering via `--since`/`--until` (RFC3339) and `--last <duration>` convenience filtering.
@@ -60,6 +60,7 @@
 
 ## Insights
 - Process attribution substantially improves first-pass triage, but can bias toward transient short-lived processes; follow-up benchmarking is needed on process-dense hosts.
+- Labels are best treated as stable dimensions (env/service/role/region); per-anomaly labels are still useful for mixed-host sample files, but stable labels make summaries and routing much simpler.
 - Detector normalization must be reflected in user-visible output; otherwise operations teams can misinterpret baselines and thresholds.
 - Line-numbered JSONL parse errors materially reduce diagnosis time for corrupted collection files.
 - Market scan (bounded, untrusted external sources): adjacent tools consistently emphasize (1) enabling/disabling collectors/scrapers to tune overhead, (2) tagging/labeling for multi-host and downstream routing, and (3) interval controls and jitter.
