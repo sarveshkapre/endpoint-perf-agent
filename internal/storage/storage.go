@@ -17,10 +17,20 @@ type Writer struct {
 }
 
 func NewWriter(path string) (*Writer, error) {
+	return NewWriterWithOptions(path, true)
+}
+
+func NewWriterWithOptions(path string, appendMode bool) (*Writer, error) {
 	if path == "-" {
 		return NewWriterWithWriter(os.Stdout), nil
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	flags := os.O_CREATE | os.O_WRONLY
+	if appendMode {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+	file, err := os.OpenFile(path, flags, 0o644)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,7 +16,9 @@ import (
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/alert"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/config"
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/redact"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/report"
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/selftest"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/storage"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/watch"
 )
@@ -46,6 +49,10 @@ func main() {
 		if err := runReport(os.Args[2:]); err != nil {
 			exitErr(err)
 		}
+	case "selftest":
+		if err := runSelftest(os.Args[2:]); err != nil {
+			exitErr(err)
+		}
 	case "version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -60,21 +67,23 @@ func main() {
 func usage() {
 	fmt.Println(`Endpoint Perf Agent
 
-Usage:
-  epagent collect [flags]
-  epagent watch [flags]
-  epagent analyze [flags]
-  epagent report [flags]
-  epagent version
+	Usage:
+	  epagent collect [flags]
+	  epagent watch [flags]
+	  epagent analyze [flags]
+	  epagent report [flags]
+	  epagent selftest [flags]
+	  epagent version
 
-Commands:
-  collect   Sample endpoint metrics and write JSONL to disk.
-  watch     Continuously sample and emit anomaly alerts (stdout NDJSON or syslog).
-  analyze   Detect anomalies from collected samples (text or JSON output).
-  report    Generate a Markdown report with explanations (use --out - for stdout).
-  version   Print the agent version.
+	Commands:
+	  collect   Sample endpoint metrics and write JSONL to disk.
+	  watch     Continuously sample and emit anomaly alerts (stdout NDJSON or syslog).
+	  analyze   Detect anomalies from collected samples (text or JSON output).
+	  report    Generate a Markdown report with explanations (use --out - for stdout).
+	  selftest  Validate host metric availability and estimate collection overhead.
+	  version   Print the agent version.
 
-Run "epagent <command> -h" for command-specific flags.`)
+	Run "epagent <command> -h" for command-specific flags.`)
 }
 
 func runCollect(args []string) error {
@@ -91,6 +100,7 @@ func runCollect(args []string) error {
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
+	truncate := fs.Bool("truncate", false, "Overwrite output file instead of appending")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	var labels kvLabelsFlag
 	fs.Var(&labels, "label", "Key/value label (repeatable): k=v")
@@ -136,7 +146,7 @@ func runCollect(args []string) error {
 		return err
 	}
 
-	writer, err := storage.NewWriter(cfg.OutputPath)
+	writer, err := storage.NewWriterWithOptions(cfg.OutputPath, !*truncate)
 	if err != nil {
 		return err
 	}
@@ -199,7 +209,12 @@ func runAnalyze(args []string) error {
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
 	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
+	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	mode, err := redact.ParseOptional(*redactMode)
+	if err != nil {
 		return err
 	}
 	if *window < 0 {
@@ -281,6 +296,13 @@ func runAnalyze(args []string) error {
 			return err
 		}
 		result = report.FilterByMetricFamilies(result, toCollectorMetrics(m))
+	}
+	if mode != redact.None {
+		result.HostID = redact.HostID(result.HostID, mode)
+		result.Labels = redact.Labels(result.Labels, mode)
+		for i := range result.Anomalies {
+			result.Anomalies[i].Labels = redact.Labels(result.Anomalies[i].Labels, mode)
+		}
 	}
 	switch *format {
 	case "text":
@@ -350,6 +372,7 @@ func runWatch(args []string) error {
 	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
+	truncate := fs.Bool("truncate", false, "When --out is set, overwrite sample file instead of appending")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	var labels kvLabelsFlag
 	fs.Var(&labels, "label", "Key/value label (repeatable): k=v")
@@ -358,10 +381,15 @@ func runWatch(args []string) error {
 	minSeverity := fs.String("min-severity", "medium", "Minimum severity to emit: low|medium|high|critical")
 	sink := fs.String("sink", "stdout", "Alert sink: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
+	redactMode := fs.String("redact", "", "Redact sensitive fields in alerts: omit|hash (empty = no redaction)")
 	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	mode, err := redact.ParseOptional(*redactMode)
+	if err != nil {
 		return err
 	}
 	if *interval < 0 {
@@ -409,7 +437,7 @@ func runWatch(args []string) error {
 		if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
 			return err
 		}
-		w, err := storage.NewWriter(*out)
+		w, err := storage.NewWriterWithOptions(*out, !*truncate)
 		if err != nil {
 			return err
 		}
@@ -439,6 +467,9 @@ func runWatch(args []string) error {
 	default:
 		return fmt.Errorf("unknown sink: %s (expected stdout|syslog)", *sink)
 	}
+	if mode != redact.None {
+		alertSink = &redactingSink{inner: alertSink, mode: mode}
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -453,6 +484,19 @@ func runWatch(args []string) error {
 	}
 	return runner.Run(ctx)
 }
+
+type redactingSink struct {
+	inner alert.Sink
+	mode  redact.Mode
+}
+
+func (s *redactingSink) Emit(ctx context.Context, a alert.Alert) error {
+	a.HostID = redact.HostID(a.HostID, s.mode)
+	a.Labels = redact.Labels(a.Labels, s.mode)
+	return s.inner.Emit(ctx, a)
+}
+
+func (s *redactingSink) Close() error { return s.inner.Close() }
 
 func parseMetricFamiliesCSV(csv string) (config.MetricFamilies, error) {
 	parts := strings.Split(csv, ",")
@@ -485,7 +529,12 @@ func runReport(args []string) error {
 	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
 	var metricFamilies stringListFlag
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
+	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	mode, err := redact.ParseOptional(*redactMode)
+	if err != nil {
 		return err
 	}
 	if *window < 0 {
@@ -568,6 +617,13 @@ func runReport(args []string) error {
 		}
 		result = report.FilterByMetricFamilies(result, toCollectorMetrics(m))
 	}
+	if mode != redact.None {
+		result.HostID = redact.HostID(result.HostID, mode)
+		result.Labels = redact.Labels(result.Labels, mode)
+		for i := range result.Anomalies {
+			result.Anomalies[i].Labels = redact.Labels(result.Anomalies[i].Labels, mode)
+		}
+	}
 	md := report.FormatMarkdown(result)
 	if *out == "-" {
 		fmt.Print(md)
@@ -578,6 +634,89 @@ func runReport(args []string) error {
 	}
 	fmt.Printf("report written to %s\n", *out)
 	return nil
+}
+
+func runSelftest(args []string) error {
+	cfgPath := findFlagStringValue(args, "config")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+
+	fs := flag.NewFlagSet("selftest", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	_ = fs.String("config", cfgPath, "Path to config file (JSON)")
+	metrics := fs.String("metrics", "", "Comma-separated metric families to test: cpu,mem,disk,net (empty = config/defaults)")
+	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Include process attribution overhead test (may be expensive)")
+	runs := fs.Int("runs", 3, "Samples per check")
+	timeout := fs.Duration("timeout", 2*time.Second, "Timeout per sample")
+	format := fs.String("format", "text", "Output format: text|json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *runs <= 0 {
+		return errors.New("runs must be greater than zero")
+	}
+	if *timeout <= 0 {
+		return errors.New("timeout must be greater than zero")
+	}
+
+	if *metrics != "" {
+		m, err := parseMetricFamiliesCSV(*metrics)
+		if err != nil {
+			return err
+		}
+		cfg.Metrics = m
+	}
+
+	switch *format {
+	case "text", "json":
+		// ok
+	default:
+		return fmt.Errorf("unknown format: %s (expected text|json)", *format)
+	}
+
+	result := selftest.Run(context.Background(), selftest.Options{
+		Metrics:            toCollectorMetrics(cfg.Metrics),
+		ProcessAttribution: *processAttribution,
+		Runs:               *runs,
+		TimeoutPerRun:      *timeout,
+	})
+
+	switch *format {
+	case "text":
+		fmt.Print(formatSelftestText(result))
+		return nil
+	case "json":
+		payload, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(payload))
+		return nil
+	}
+	return nil
+}
+
+func formatSelftestText(r selftest.Result) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Selftest: %s/%s at %s\n", r.GOOS, r.GOARCH, r.Timestamp.Format(time.RFC3339))
+	if len(r.EnabledMetrics) > 0 {
+		fmt.Fprintf(&b, "Metrics: %s\n", strings.Join(r.EnabledMetrics, ","))
+	}
+	if r.ProcessListOK {
+		fmt.Fprintf(&b, "Process list: ok (count=%d)\n", r.ProcessCount)
+	} else if r.ProcessListError != "" {
+		fmt.Fprintf(&b, "Process list: error (%s)\n", r.ProcessListError)
+	}
+	for _, c := range r.Checks {
+		if c.OK {
+			fmt.Fprintf(&b, "- %s: ok (runs=%d, median=%s, p95=%s)\n", c.Name, c.Runs, c.MedianTime, c.P95Time)
+		} else {
+			fmt.Fprintf(&b, "- %s: error (%s)\n", c.Name, c.Error)
+		}
+	}
+	return b.String()
 }
 
 func findFlagStringValue(args []string, name string) string {

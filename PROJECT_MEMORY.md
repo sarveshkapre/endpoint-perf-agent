@@ -2,6 +2,25 @@
 
 ## Decision Log
 
+### 2026-02-10 - Add selftest, output redaction, and safe overwrite for sample files
+- Decision:
+  - Add `epagent selftest` to validate host metric availability and estimate sampling overhead (including process attribution overhead probe).
+  - Add `--redact omit|hash` to `analyze`/`report` and `watch` alerts to omit/hash `host_id` and labels for sharing.
+  - Add `collect --truncate` and `watch --out ... --truncate` to overwrite sample files instead of appending.
+- Why: Production readiness needs (1) a quick host readiness check, (2) a safe sharing mode for outputs, and (3) a way to avoid silently appending multiple runs into one sample file.
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/selftest/selftest.go`, `internal/redact/redact.go`, `internal/storage/storage.go`
+  - Tests: `cmd/epagent/main_test.go`, `internal/redact/redact_test.go`, `internal/storage/storage_test.go`
+  - Local smoke:
+    - `./bin/epagent selftest --format text --runs 1 --timeout 2s`
+    - `./bin/epagent collect --once --out tmp/trunc-smoke.jsonl --truncate --process-attribution=false --metrics cpu`
+    - `./bin/epagent analyze --in tmp/epagent-smoke.jsonl --format json --window 5 --threshold 3 --redact omit`
+    - `./bin/epagent report --in tmp/epagent-smoke.jsonl --out - --window 5 --threshold 3 --redact hash`
+    - `./bin/epagent watch --duration 2s --interval 1s --process-attribution=false --metrics cpu,mem --sink stdout --min-severity critical --redact omit > tmp/watch-smoke.ndjson`
+- Commit: TBD
+- Confidence: high
+- Trust label: verified-local
+
 ### 2026-02-10 - Add labels for ingestion routing and metric-family output filtering
 - Decision:
   - Add config `labels` and CLI `--label k=v` (repeatable) for `collect`/`watch`, persisted in JSONL samples and propagated to alerts and analysis/report outputs.
@@ -140,6 +159,13 @@
 ## Verification Evidence
 - `make check` (pass)
 - `make check` (pass; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
+- `make check` (pass; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
+- `./bin/epagent selftest --format text --runs 1 --timeout 2s` (pass)
+- `f=$(mktemp tmp/trunc-smoke.XXXXXX.jsonl) && ./bin/epagent collect --once --out "$f" --truncate --process-attribution=false --metrics cpu && wc -l "$f" && ./bin/epagent collect --once --out "$f" --process-attribution=false --metrics cpu && wc -l "$f" && ./bin/epagent collect --once --out "$f" --truncate --process-attribution=false --metrics cpu && wc -l "$f"` (pass; line counts 1 -> 2 -> 1)
+- `./bin/epagent collect --once --out tmp/epagent-smoke.jsonl --truncate --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke` (pass)
+- `./bin/epagent analyze --in tmp/epagent-smoke.jsonl --format json --window 5 --threshold 3 --redact omit` (pass; host_id/labels omitted)
+- `./bin/epagent report --in tmp/epagent-smoke.jsonl --out - --window 5 --threshold 3 --redact hash` (pass; host_id/labels hashed)
+- `./bin/epagent watch --duration 2s --interval 1s --process-attribution=false --metrics cpu,mem --sink stdout --min-severity critical --redact omit > tmp/watch-smoke.ndjson` (pass)
 - `./bin/epagent collect --once --out tmp/smoke-labels.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke` (pass; JSONL includes labels)
 - `head -n 1 tmp/smoke-labels.jsonl` (pass; shows `"labels":{...}`)
 - `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3` (pass; includes `labels` in JSON output)

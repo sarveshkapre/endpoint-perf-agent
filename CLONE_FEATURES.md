@@ -13,14 +13,20 @@
   Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
 - [ ] P2 Optional SQLite storage mode with retention controls and a migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
-- [ ] P3 Add a lightweight `selftest` command to validate metric availability/permissions on the host and estimate overhead (interval jitter, process attribution cost).
+- [ ] P2 Add sampling jitter (bounded) to reduce synchronized collection across hosts.
   Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
-- [ ] P3 Add a `redact` mode for outputs (`analyze`/`report`/alerts) to omit or hash `host_id` and labels for easier sharing.
+- [ ] P3 Add a `redact` subcommand to transform an existing JSONL file (omit/hash sensitive fields) for sharing without re-running `analyze`/`report`.
   Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
 - [ ] P3 Improve build noise: investigate/suppress toolchain warnings from dependencies during `go test` on Apple Silicon without hiding real errors.
   Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
 
 ## Implemented
+- [x] 2026-02-10: Added `selftest` command to validate host metric availability/permissions and estimate sampling overhead (including optional process attribution overhead probe).
+  Evidence: `cmd/epagent/main.go`, `internal/selftest/selftest.go`, `README.md`, `docs/CHANGELOG.md`, `make check`, local smoke `./bin/epagent selftest --runs 1`.
+- [x] 2026-02-10: Added `--redact omit|hash` for `analyze`/`report` outputs and `watch` alerts to omit/hash `host_id` and labels for sharing.
+  Evidence: `cmd/epagent/main.go`, `internal/redact/redact.go`, `internal/redact/redact_test.go`, `cmd/epagent/main_test.go`, `README.md`, `docs/CHANGELOG.md`, `make check`.
+- [x] 2026-02-10: Added `collect --truncate` and `watch --out ... --truncate` to overwrite sample files instead of appending.
+  Evidence: `cmd/epagent/main.go`, `internal/storage/storage.go`, `internal/storage/storage_test.go`, `README.md`, `docs/CHANGELOG.md`, `make check`, local smoke `wc -l` overwrite check.
 - [x] 2026-02-10: Added config `labels` and `collect`/`watch` `--label k=v` (repeatable) to tag samples; labels propagate into JSONL samples, alerts, and analysis/report outputs (including per-anomaly labels).
   Evidence: `internal/config/config.go`, `cmd/epagent/main.go`, `internal/collector/collector.go`, `internal/watch/engine.go`, `internal/alert/alert.go`, `internal/anomaly/anomaly.go`, `internal/report/report.go`, `make check`.
 - [x] 2026-02-10: Added `analyze`/`report` `--metric cpu|mem|disk|net` (repeatable) to filter output by metric family without re-collecting.
@@ -75,6 +81,7 @@
   - OpenTelemetry Resources (custom resource attributes): https://opentelemetry.io/docs/concepts/resources/
   - OpenTelemetry resource semantic conventions: https://opentelemetry.io/docs/specs/semconv/resource/
   - Telegraf configuration (intervals + tags + plugin filtering): https://docs.influxdata.com/telegraf/v1/configuration/
+  - Telegraf `--test` (validate config and emit metrics once): https://docs.influxdata.com/telegraf/v1/commands/telegraf/
   - Elastic Metricbeat module config (period + fields + tags): https://www.elastic.co/guide/en/beats/metricbeat/current/configuration-metricbeat.html
   - Datadog unified service tagging (`env`, `service`, `version`): https://docs.datadoghq.com/getting_started/tagging/unified_service_tagging/
 

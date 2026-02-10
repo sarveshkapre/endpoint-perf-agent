@@ -23,3 +23,6 @@
 - Improved JSONL parse errors with line numbers for faster corruption diagnosis.
 - Added `collect --process-attribution=false` and config `process_attribution` to disable per-sample process scans when overhead is a concern.
 - Added `watch` command to stream anomaly alerts to stdout (NDJSON) or syslog, with per-metric cooldown/dedupe.
+- Added `selftest` command to validate host metric availability and estimate collection overhead.
+- Added `--redact omit|hash` for `analyze`/`report` outputs and `watch` alerts to omit/hash `host_id` and labels for sharing.
+- Added `collect --truncate` and `watch --out ... --truncate` to overwrite sample files instead of appending.

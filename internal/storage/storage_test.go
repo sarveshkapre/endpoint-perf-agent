@@ -80,3 +80,44 @@ func TestWriterWithWriterWritesJSONL(t *testing.T) {
 		t.Fatalf("expected payload to include cpu_percent, got: %s", buf.String())
 	}
 }
+
+func TestNewWriterWithOptions_TruncateOverwrites(t *testing.T) {
+	path := t.TempDir() + "/samples.jsonl"
+
+	w1, err := NewWriterWithOptions(path, true)
+	if err != nil {
+		t.Fatalf("NewWriterWithOptions(append): %v", err)
+	}
+	if err := w1.Write(collector.MetricSample{Timestamp: time.Now().UTC(), HostID: "a", CPUPercent: 1}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_ = w1.Close()
+
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if len(before) == 0 {
+		t.Fatalf("expected non-empty file after first write")
+	}
+
+	w2, err := NewWriterWithOptions(path, false)
+	if err != nil {
+		t.Fatalf("NewWriterWithOptions(truncate): %v", err)
+	}
+	if err := w2.Write(collector.MetricSample{Timestamp: time.Now().UTC(), HostID: "b", CPUPercent: 2}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_ = w2.Close()
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if bytes.Contains(after, []byte(`"host_id":"a"`)) {
+		t.Fatalf("expected truncate writer to overwrite old contents, got: %s", string(after))
+	}
+	if !bytes.Contains(after, []byte(`"host_id":"b"`)) {
+		t.Fatalf("expected new contents, got: %s", string(after))
+	}
+}

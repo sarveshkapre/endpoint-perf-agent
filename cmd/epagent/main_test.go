@@ -57,6 +57,13 @@ func TestAnalyze_RejectsUnknownMetricFamilyFilter(t *testing.T) {
 	}
 }
 
+func TestAnalyze_RejectsUnknownRedactMode(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--redact", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestAnalyze_RejectsInvalidSince(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runAnalyze([]string{"--in", in, "--since", "nope"}); err == nil {
@@ -120,6 +127,13 @@ func TestReport_RejectsUnknownMetricFamilyFilter(t *testing.T) {
 	}
 }
 
+func TestReport_RejectsUnknownRedactMode(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runReport([]string{"--in", in, "--out", "-", "--redact", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestReport_LastCannotCombineUntil(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runReport([]string{"--in", in, "--out", "-", "--last", "1s", "--until", "2026-02-09T00:00:02Z"}); err == nil {
@@ -141,6 +155,24 @@ func TestWatch_RejectsNegativeDuration(t *testing.T) {
 
 func TestWatch_RejectsUnknownMetrics(t *testing.T) {
 	if err := runWatch([]string{"--duration", "1s", "--metrics", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestWatch_RejectsUnknownRedactMode(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--redact", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestSelftest_RejectsUnknownFormat(t *testing.T) {
+	if err := runSelftest([]string{"--format", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestSelftest_RejectsUnknownMetrics(t *testing.T) {
+	if err := runSelftest([]string{"--metrics", "nope"}); err == nil {
 		t.Fatalf("expected error")
 	}
 }

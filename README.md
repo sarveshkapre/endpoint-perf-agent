@@ -23,6 +23,9 @@ make build
 # collect samples for 60 seconds
 ./bin/epagent collect --duration 60s
 
+# validate host permissions / overhead
+./bin/epagent selftest --format text
+
 # stream alerts for 60 seconds (NDJSON to stdout)
 ./bin/epagent watch --duration 60s --min-severity medium --sink stdout
 
@@ -55,6 +58,7 @@ You can add/override labels at runtime with `--label k=v` (repeatable) on `colle
 ```bash
 epagent collect --once
 epagent collect --once --out -
+epagent collect --duration 60s --out data/metrics.jsonl --truncate
 epagent collect --once --host-id laptop-01
 epagent collect --duration 60s --label env=prod --label service=api
 epagent collect --duration 60s --metrics cpu,mem
@@ -66,6 +70,7 @@ epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --format ndjson --sink stdout  # one alert per line
 epagent analyze --in data/metrics.jsonl --metric cpu --metric net  # filter output by metric family
+epagent analyze --in data/metrics.jsonl --format json --redact omit  # omit host_id/labels for sharing
 epagent analyze --in data/metrics.jsonl --since 2026-02-09T00:00:00Z --until 2026-02-09T00:10:00Z
 epagent analyze --in data/metrics.jsonl --last 10m
 epagent analyze --in data/metrics.jsonl --min-severity high --top 10
@@ -75,6 +80,8 @@ epagent report --in data/metrics.jsonl --since 2026-02-09T00:00:00Z --until 2026
 epagent report --in data/metrics.jsonl --metric cpu --out -  # filter output by metric family
 epagent report --in data/metrics.jsonl --last 10m --out -
 epagent report --out -
+epagent report --in data/metrics.jsonl --out - --redact hash  # hash host_id/labels for sharing
+epagent selftest --format json --runs 3 --timeout 2s
 ```
 
 ## Docker
