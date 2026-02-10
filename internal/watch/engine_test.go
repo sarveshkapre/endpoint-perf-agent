@@ -21,6 +21,7 @@ func TestEngine_EmitsAlert(t *testing.T) {
 		s := collector.MetricSample{
 			Timestamp:       base.Add(time.Duration(i) * time.Second),
 			HostID:          "host-1",
+			Labels:          map[string]string{"env": "test"},
 			CPUPercent:      v,
 			MemUsedPercent:  20,
 			DiskUsedPercent: 30,
@@ -35,6 +36,9 @@ func TestEngine_EmitsAlert(t *testing.T) {
 				gotCPU = true
 				if a.HostID != "host-1" {
 					t.Fatalf("unexpected host_id: %q", a.HostID)
+				}
+				if got := a.Labels["env"]; got != "test" {
+					t.Fatalf("expected labels to propagate, got: %+v", a.Labels)
 				}
 				if a.Timestamp.IsZero() {
 					t.Fatalf("expected timestamp")

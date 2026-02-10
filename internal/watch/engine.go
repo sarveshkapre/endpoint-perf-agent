@@ -126,6 +126,7 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 		alerts = append(alerts, alert.Alert{
 			Timestamp:     sample.Timestamp,
 			HostID:        sample.HostID,
+			Labels:        sample.Labels,
 			Metric:        a.Name,
 			Value:         a.Value,
 			Mean:          a.Mean,

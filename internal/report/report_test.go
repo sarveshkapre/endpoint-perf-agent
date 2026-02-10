@@ -70,6 +70,7 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 		{
 			Timestamp:       t0,
 			HostID:          "host-01",
+			Labels:          map[string]string{"env": "test", "service": "api"},
 			CPUPercent:      10,
 			MemUsedPercent:  40,
 			DiskUsedPercent: 50,
@@ -78,6 +79,7 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 		{
 			Timestamp:       t0.Add(1 * time.Second),
 			HostID:          "host-01",
+			Labels:          map[string]string{"env": "test", "service": "api"},
 			CPUPercent:      20,
 			MemUsedPercent:  40,
 			DiskUsedPercent: 50,
@@ -86,6 +88,7 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 		{
 			Timestamp:       t0.Add(2 * time.Second),
 			HostID:          "host-01",
+			Labels:          map[string]string{"env": "test", "service": "api"},
 			CPUPercent:      30,
 			MemUsedPercent:  40,
 			DiskUsedPercent: 50,
@@ -96,6 +99,9 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 	result := Analyze(samples, 5, 3.0)
 	if result.HostID != "host-01" {
 		t.Fatalf("expected host_id host-01, got %q", result.HostID)
+	}
+	if got := result.Labels["service"]; got != "api" {
+		t.Fatalf("expected stable labels to be detected, got: %+v", result.Labels)
 	}
 
 	cpu, ok := result.Baselines["cpu_percent"]
@@ -138,6 +144,14 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 	if decoded["host_id"] != "host-01" {
 		t.Fatalf("expected host_id in json")
 	}
+	labelsAny, ok := decoded["labels"]
+	if !ok {
+		t.Fatalf("expected labels in json")
+	}
+	labels, ok := labelsAny.(map[string]any)
+	if !ok || labels["env"] != "test" || labels["service"] != "api" {
+		t.Fatalf("unexpected labels in json: %+v", labelsAny)
+	}
 	if _, ok := decoded["baselines"]; !ok {
 		t.Fatalf("expected baselines in json")
 	}
@@ -179,6 +193,7 @@ func TestAnalyzeAttachesAnomalyProcessContext(t *testing.T) {
 	anomalyTimestamp := start.Add(7 * time.Second)
 	samples = append(samples, collector.MetricSample{
 		Timestamp:       anomalyTimestamp,
+		Labels:          map[string]string{"env": "prod"},
 		CPUPercent:      95,
 		MemUsedPercent:  40,
 		DiskUsedPercent: 50,
@@ -216,6 +231,9 @@ func TestAnalyzeAttachesAnomalyProcessContext(t *testing.T) {
 	}
 	if first.TopMemProcess == nil || first.TopMemProcess.Name != "mem-hog" {
 		t.Fatalf("expected top memory process context, got %+v", first.TopMemProcess)
+	}
+	if got := first.Labels["env"]; got != "prod" {
+		t.Fatalf("expected anomaly labels to propagate, got: %+v", first.Labels)
 	}
 
 	md := FormatMarkdown(result)

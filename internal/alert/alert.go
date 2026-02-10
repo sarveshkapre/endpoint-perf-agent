@@ -13,6 +13,7 @@ import (
 type Alert struct {
 	Timestamp     time.Time                   `json:"timestamp"`
 	HostID        string                      `json:"host_id,omitempty"`
+	Labels        map[string]string           `json:"labels,omitempty"`
 	Metric        string                      `json:"metric"`
 	Value         float64                     `json:"value"`
 	Mean          float64                     `json:"mean"`

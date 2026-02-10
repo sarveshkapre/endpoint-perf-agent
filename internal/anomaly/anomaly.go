@@ -15,7 +15,8 @@ type ProcessAttribution struct {
 
 type Anomaly struct {
 	Name          string
-	Timestamp     time.Time `json:"timestamp,omitempty"`
+	Timestamp     time.Time         `json:"timestamp,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
 	Value         float64
 	Mean          float64
 	Stddev        float64

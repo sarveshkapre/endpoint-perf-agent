@@ -6,5 +6,6 @@
 
 ## Next
 - Optional SQLite storage
-- Labels/tags for multi-host and multi-service ingestion (propagate into alerts and reports)
 - Static-threshold and percentile-based alert rules
+- `selftest` / overhead benchmarking to validate host permissions and collection cost
+- Optional redaction mode for sharing outputs (omit/hash host_id + labels)

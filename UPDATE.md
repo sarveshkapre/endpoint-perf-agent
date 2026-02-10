@@ -1,3 +1,22 @@
+# Update (2026-02-10)
+
+## Shipped
+- Added optional labels for multi-host/multi-service ingestion:
+  - config `labels` and `collect`/`watch` `--label k=v` (repeatable)
+  - labels propagate into JSONL samples, alerts, and analysis/report outputs
+- Added `analyze`/`report` `--metric cpu|mem|disk|net` (repeatable) to filter output by metric family.
+
+## Verify
+- `make check`
+- `./bin/epagent collect --once --out tmp/smoke-labels.jsonl --process-attribution=false --metrics cpu,mem --host-id smoke-host --label env=dev --label service=smoke`
+- `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3`
+- `./bin/epagent analyze --in tmp/smoke-labels.jsonl --format json --window 5 --threshold 3 --metric cpu`
+- `./bin/epagent analyze --in tmp/anom-labels.jsonl --format ndjson --sink stdout --window 5 --threshold 2.5 --metric cpu`
+- `./bin/epagent report --in tmp/anom-labels.jsonl --out - --window 5 --threshold 2.5 --metric cpu`
+
+## Notes
+- No external API integration was changed; external integration smoke checks are not applicable for this update.
+
 # Update (2026-02-09)
 
 ## Shipped

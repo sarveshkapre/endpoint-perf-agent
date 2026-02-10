@@ -31,6 +31,7 @@ type AnalysisResult struct {
 	WindowSize      int
 	ZScoreThreshold float64
 	HostID          string
+	Labels          map[string]string
 	TotalAnomalies  int
 	Anomalies       []anomaly.Anomaly
 	Baselines       map[string]MetricStats
@@ -56,6 +57,7 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 	}
 
 	result.HostID = stableHostID(ordered)
+	result.Labels = stableLabels(ordered)
 
 	detector := anomaly.NewDetector(windowSize, threshold)
 	result.FirstTimestamp = ordered[0].Timestamp
@@ -116,6 +118,7 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 			metricValues[name] = append(metricValues[name], value)
 			if a := detector.Check(name, value); a != nil {
 				a.Timestamp = current.Timestamp
+				a.Labels = cloneLabels(current.Labels)
 				a.TopCPUProcess = toAnomalyProcess(current.TopCPUProcess)
 				a.TopMemProcess = toAnomalyProcess(current.TopMemProcess)
 				result.Anomalies = append(result.Anomalies, *a)
@@ -162,6 +165,9 @@ func FormatSummary(result AnalysisResult) string {
 	if result.HostID != "" {
 		fmt.Fprintf(&b, "Host: %s\n", result.HostID)
 	}
+	if len(result.Labels) > 0 {
+		fmt.Fprintf(&b, "Labels: %s\n", formatLabelsInline(result.Labels))
+	}
 	fmt.Fprintf(&b, "Duration: %s\n", result.Duration)
 	fmt.Fprintf(&b, "Window size: %d\n", result.WindowSize)
 	fmt.Fprintf(&b, "Z-score threshold: %.2f\n", result.ZScoreThreshold)
@@ -197,6 +203,9 @@ func FormatMarkdown(result AnalysisResult) string {
 	if result.Samples > 0 {
 		if result.HostID != "" {
 			fmt.Fprintf(&b, "- Host: %s\n", result.HostID)
+		}
+		if len(result.Labels) > 0 {
+			fmt.Fprintf(&b, "- Labels: %s\n", formatLabelsInline(result.Labels))
 		}
 		fmt.Fprintf(&b, "- Duration: %s\n", result.Duration)
 		fmt.Fprintf(&b, "- Window size: %d\n", result.WindowSize)
@@ -257,6 +266,7 @@ func FormatJSON(result AnalysisResult) ([]byte, error) {
 		WindowSize      int                    `json:"window_size"`
 		ZScoreThreshold float64                `json:"zscore_threshold"`
 		HostID          string                 `json:"host_id,omitempty"`
+		Labels          map[string]string      `json:"labels,omitempty"`
 		TotalAnomalies  int                    `json:"anomalies_total"`
 		FirstTimestamp  string                 `json:"first_timestamp,omitempty"`
 		LastTimestamp   string                 `json:"last_timestamp,omitempty"`
@@ -269,6 +279,7 @@ func FormatJSON(result AnalysisResult) ([]byte, error) {
 		WindowSize:      result.WindowSize,
 		ZScoreThreshold: result.ZScoreThreshold,
 		HostID:          result.HostID,
+		Labels:          result.Labels,
 		TotalAnomalies:  result.TotalAnomalies,
 		Anomalies:       result.Anomalies,
 		Baselines:       result.Baselines,
@@ -297,6 +308,72 @@ func stableHostID(samples []collector.MetricSample) string {
 		}
 	}
 	return host
+}
+
+func stableLabels(samples []collector.MetricSample) map[string]string {
+	var stable map[string]string
+	for _, s := range samples {
+		if len(s.Labels) == 0 {
+			if stable != nil {
+				// Mixed labeled and unlabeled samples: treat as unstable.
+				return nil
+			}
+			continue
+		}
+		if stable == nil {
+			stable = cloneLabels(s.Labels)
+			continue
+		}
+		if !equalLabels(stable, s.Labels) {
+			return nil
+		}
+	}
+	return stable
+}
+
+func equalLabels(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		if bv, ok := b[k]; !ok || bv != av {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneLabels(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func formatLabelsInline(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, labels[k]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func toAnomalyProcess(p *collector.ProcessAttribution) *anomaly.ProcessAttribution {

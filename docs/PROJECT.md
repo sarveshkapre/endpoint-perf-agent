@@ -42,5 +42,5 @@ make release
 
 ## Next 3 improvements
 - Add SQLite storage mode and rotation policies
-- Add alert output formats (JSON, syslog)
-- Add static/percentile threshold rule options
+- Add static/percentile threshold rule options (beyond z-score)
+- Add `selftest` / overhead benchmarking for quick host readiness checks

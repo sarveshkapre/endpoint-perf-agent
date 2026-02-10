@@ -23,6 +23,7 @@ type ProcessAttribution struct {
 type MetricSample struct {
 	Timestamp       time.Time           `json:"timestamp"`
 	HostID          string              `json:"host_id"`
+	Labels          map[string]string   `json:"labels,omitempty"`
 	CPUPercent      float64             `json:"cpu_percent"`
 	MemUsedPercent  float64             `json:"mem_used_percent"`
 	DiskUsedPercent float64             `json:"disk_used_percent"`
@@ -48,12 +49,13 @@ func DefaultMetricFamilies() MetricFamilies {
 
 type Sampler struct {
 	hostID             string
+	labels             map[string]string
 	processAttribution bool
 	metrics            MetricFamilies
 }
 
-func NewSampler(hostID string, processAttribution bool, metrics MetricFamilies) *Sampler {
-	return &Sampler{hostID: hostID, processAttribution: processAttribution, metrics: metrics}
+func NewSampler(hostID string, labels map[string]string, processAttribution bool, metrics MetricFamilies) *Sampler {
+	return &Sampler{hostID: hostID, labels: cloneLabels(labels), processAttribution: processAttribution, metrics: metrics}
 }
 
 func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
@@ -123,6 +125,7 @@ func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
 	return MetricSample{
 		Timestamp:       time.Now().UTC(),
 		HostID:          s.hostID,
+		Labels:          cloneLabels(s.labels),
 		CPUPercent:      cpuPercent,
 		MemUsedPercent:  memUsedPercent,
 		DiskUsedPercent: diskUsedPercent,
@@ -134,6 +137,23 @@ func (s *Sampler) Sample(ctx context.Context) (MetricSample, error) {
 		TopMemProcess:   topMemProcess,
 		MetricFamilies:  &MetricFamilies{CPU: s.metrics.CPU, Mem: s.metrics.Mem, Disk: s.metrics.Disk, Net: s.metrics.Net},
 	}, nil
+}
+
+func cloneLabels(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func sampleTopProcesses(ctx context.Context) (*ProcessAttribution, *ProcessAttribution) {

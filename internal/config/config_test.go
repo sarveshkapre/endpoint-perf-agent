@@ -42,3 +42,23 @@ func TestLoadRespectsEnabledMetrics(t *testing.T) {
 		t.Fatalf("unexpected metrics: %+v", cfg.Metrics)
 	}
 }
+
+func TestLoadRespectsLabels(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfg.json")
+	payload := `{"labels":{"env":"test","service":"api"}}`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Labels["env"]; got != "test" {
+		t.Fatalf("expected env label, got %+v", cfg.Labels)
+	}
+	if got := cfg.Labels["service"]; got != "api" {
+		t.Fatalf("expected service label, got %+v", cfg.Labels)
+	}
+}

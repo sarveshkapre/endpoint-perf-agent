@@ -5,9 +5,10 @@ Local-first endpoint performance agent that samples host metrics, detects anomal
 ## Features (today)
 - Cross-platform CPU/memory/disk/network sampling (gopsutil)
 - Per-sample top CPU/memory process attribution for triage context
+- Optional labels (`labels`, `--label k=v`) for multi-host and multi-service ingestion
 - JSONL storage for easy ingestion
 - Rolling z-score anomaly detection with severity + explanations
-- CLI: `collect`, `analyze` (text/JSON), `report` (Markdown/stdout)
+- CLI: `collect`, `watch` (alerts to stdout NDJSON or syslog), `analyze` (text/JSON/NDJSON), `report` (Markdown/stdout)
 
 ## Top risks / unknowns
 - Baselines vary per host; short windows can create false positives/negatives.
@@ -35,8 +36,9 @@ Try it:
 
 ## Next to ship (tight scope)
 - Optional SQLite storage with simple retention controls.
-- Alert output formats (JSON stream, syslog).
 - Static-threshold and percentile-based alert rules.
+- `selftest` / overhead benchmarking to validate host readiness and collection cost.
+- Optional redaction mode for sharing outputs (omit/hash host_id + labels).
 
 ## Bigger ideas (tracked)
 See `docs/ROADMAP.md`.

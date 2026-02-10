@@ -92,6 +92,8 @@ func runCollect(args []string) error {
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
+	var labels kvLabelsFlag
+	fs.Var(&labels, "label", "Key/value label (repeatable): k=v")
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
@@ -104,6 +106,9 @@ func runCollect(args []string) error {
 	cfg.ProcessAttribution = *processAttribution
 	if *hostID != "" {
 		cfg.HostID = *hostID
+	}
+	if len(labels.m) > 0 {
+		cfg.Labels = mergeLabels(cfg.Labels, labels.m)
 	}
 	if *metrics != "" {
 		m, err := parseMetricFamiliesCSV(*metrics)
@@ -137,7 +142,7 @@ func runCollect(args []string) error {
 	}
 	defer writer.Close()
 
-	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
+	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -190,6 +195,8 @@ func runAnalyze(args []string) error {
 	last := fs.Duration("last", 0, "Analyze only the last duration of samples (relative to the file's last sample timestamp)")
 	sinceStr := fs.String("since", "", "Include samples at or after this RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z)")
 	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
+	var metricFamilies stringListFlag
+	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
 	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	if err := fs.Parse(args); err != nil {
@@ -268,6 +275,13 @@ func runAnalyze(args []string) error {
 	if err != nil {
 		return err
 	}
+	if metricFamilies.Any() {
+		m, err := config.ParseMetricFamilies(metricFamilies.Values())
+		if err != nil {
+			return err
+		}
+		result = report.FilterByMetricFamilies(result, toCollectorMetrics(m))
+	}
 	switch *format {
 	case "text":
 		fmt.Println(report.FormatSummary(result))
@@ -296,9 +310,14 @@ func runAnalyze(args []string) error {
 		}
 
 		for _, a := range result.Anomalies {
+			labels := a.Labels
+			if len(labels) == 0 {
+				labels = result.Labels
+			}
 			if err := alertSink.Emit(context.Background(), alert.Alert{
 				Timestamp:     a.Timestamp,
 				HostID:        result.HostID,
+				Labels:        labels,
 				Metric:        a.Name,
 				Value:         a.Value,
 				Mean:          a.Mean,
@@ -332,6 +351,8 @@ func runWatch(args []string) error {
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
+	var labels kvLabelsFlag
+	fs.Var(&labels, "label", "Key/value label (repeatable): k=v")
 	window := fs.Int("window", cfg.WindowSize, "Rolling window size")
 	threshold := fs.Float64("threshold", cfg.ZScoreThreshold, "Z-score threshold")
 	minSeverity := fs.String("min-severity", "medium", "Minimum severity to emit: low|medium|high|critical")
@@ -367,6 +388,9 @@ func runWatch(args []string) error {
 	if *hostID != "" {
 		cfg.HostID = *hostID
 	}
+	if len(labels.m) > 0 {
+		cfg.Labels = mergeLabels(cfg.Labels, labels.m)
+	}
 	if *metrics != "" {
 		m, err := parseMetricFamiliesCSV(*metrics)
 		if err != nil {
@@ -394,7 +418,7 @@ func runWatch(args []string) error {
 		defer writerCloser.Close()
 	}
 
-	sampler := collector.NewSampler(cfg.HostID, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
+	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
 	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, *minSeverity, *cooldown)
 	if err != nil {
@@ -459,6 +483,8 @@ func runReport(args []string) error {
 	last := fs.Duration("last", 0, "Report only the last duration of samples (relative to the file's last sample timestamp)")
 	sinceStr := fs.String("since", "", "Include samples at or after this RFC3339 timestamp (e.g. 2026-02-09T00:00:00Z)")
 	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
+	var metricFamilies stringListFlag
+	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -535,6 +561,13 @@ func runReport(args []string) error {
 	if err != nil {
 		return err
 	}
+	if metricFamilies.Any() {
+		m, err := config.ParseMetricFamilies(metricFamilies.Values())
+		if err != nil {
+			return err
+		}
+		result = report.FilterByMetricFamilies(result, toCollectorMetrics(m))
+	}
 	md := report.FormatMarkdown(result)
 	if *out == "-" {
 		fmt.Print(md)
@@ -581,4 +614,97 @@ func parseRFC3339TimeFlag(name, value string) (time.Time, error) {
 func exitErr(err error) {
 	fmt.Fprintf(os.Stderr, "error: %v\n", err)
 	os.Exit(1)
+}
+
+type kvLabelsFlag struct {
+	m map[string]string
+}
+
+func (f *kvLabelsFlag) String() string {
+	if len(f.m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(f.m))
+	for k, v := range f.m {
+		parts = append(parts, k+"="+v)
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *kvLabelsFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	key, val, ok := strings.Cut(value, "=")
+	if !ok {
+		return fmt.Errorf("label must be in k=v form: %q", value)
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("label key must be non-empty: %q", value)
+	}
+	if strings.ContainsAny(key, " \t\r\n") {
+		return fmt.Errorf("label key must not contain whitespace: %q", key)
+	}
+	if f.m == nil {
+		f.m = make(map[string]string)
+	}
+	f.m[key] = val
+	return nil
+}
+
+func mergeLabels(base, extra map[string]string) map[string]string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(extra))
+	for k, v := range base {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	for k, v := range extra {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type stringListFlag struct {
+	values []string
+}
+
+func (f *stringListFlag) String() string { return strings.Join(f.values, ",") }
+
+func (f *stringListFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f.values = append(f.values, part)
+	}
+	return nil
+}
+
+func (f *stringListFlag) Any() bool { return len(f.values) > 0 }
+
+func (f *stringListFlag) Values() []string {
+	if len(f.values) == 0 {
+		return nil
+	}
+	out := make([]string, len(f.values))
+	copy(out, f.values)
+	return out
 }

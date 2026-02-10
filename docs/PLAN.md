@@ -36,9 +36,12 @@ Ship a local-first endpoint performance agent that samples host metrics, detects
 ## Next Milestones
 - Optional SQLite storage
 - Configurable alert rules (percentile, static thresholds)
-- Syslog/JSON alert output targets
+- `selftest` / overhead benchmarking to validate host readiness and collection cost
+- Optional redaction mode for sharing outputs (omit/hash host_id + labels)
 
 ## Shipped
+- 2026-02-10: Added config `labels` and `collect`/`watch` `--label k=v` (repeatable); labels propagate into alerts and reports.
+- 2026-02-10: Added `analyze`/`report` `--metric cpu|mem|disk|net` (repeatable) to filter output by metric family.
 - 2026-02-09: Per-sample top-process attribution and anomaly context (timestamp + process details) in analyze/report outputs.
 - 2026-02-09: Analysis/report input hardening (`--window`/`--threshold`/`--top`) and line-numbered JSONL parse errors.
 - 2026-02-01: `analyze --format json`, `report --out -`, more robust sample handling + clearer explanations.

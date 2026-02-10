@@ -31,25 +31,27 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval           time.Duration  `json:"-"`
-	Duration           time.Duration  `json:"-"`
-	WindowSize         int            `json:"window_size"`
-	ZScoreThreshold    float64        `json:"zscore_threshold"`
-	OutputPath         string         `json:"output_path"`
-	HostID             string         `json:"host_id"`
-	ProcessAttribution bool           `json:"process_attribution"`
-	Metrics            MetricFamilies `json:"-"`
+	Interval           time.Duration     `json:"-"`
+	Duration           time.Duration     `json:"-"`
+	WindowSize         int               `json:"window_size"`
+	ZScoreThreshold    float64           `json:"zscore_threshold"`
+	OutputPath         string            `json:"output_path"`
+	HostID             string            `json:"host_id"`
+	Labels             map[string]string `json:"-"`
+	ProcessAttribution bool              `json:"process_attribution"`
+	Metrics            MetricFamilies    `json:"-"`
 }
 
 type fileConfig struct {
-	Interval           Duration  `json:"interval"`
-	Duration           Duration  `json:"duration"`
-	WindowSize         int       `json:"window_size"`
-	ZScoreThreshold    float64   `json:"zscore_threshold"`
-	OutputPath         string    `json:"output_path"`
-	HostID             string    `json:"host_id"`
-	ProcessAttribution *bool     `json:"process_attribution"`
-	EnabledMetrics     *[]string `json:"enabled_metrics"`
+	Interval           Duration          `json:"interval"`
+	Duration           Duration          `json:"duration"`
+	WindowSize         int               `json:"window_size"`
+	ZScoreThreshold    float64           `json:"zscore_threshold"`
+	OutputPath         string            `json:"output_path"`
+	HostID             string            `json:"host_id"`
+	Labels             map[string]string `json:"labels"`
+	ProcessAttribution *bool             `json:"process_attribution"`
+	EnabledMetrics     *[]string         `json:"enabled_metrics"`
 }
 
 type MetricFamilies struct {
@@ -67,6 +69,7 @@ func Default() Config {
 		ZScoreThreshold:    3.0,
 		OutputPath:         filepath.Join("data", "metrics.jsonl"),
 		HostID:             "",
+		Labels:             nil,
 		ProcessAttribution: true,
 		Metrics: MetricFamilies{
 			CPU:  true,
@@ -107,6 +110,9 @@ func Load(path string) (Config, error) {
 	}
 	if fc.HostID != "" {
 		cfg.HostID = fc.HostID
+	}
+	if fc.Labels != nil {
+		cfg.Labels = fc.Labels
 	}
 	if fc.ProcessAttribution != nil {
 		cfg.ProcessAttribution = *fc.ProcessAttribution
