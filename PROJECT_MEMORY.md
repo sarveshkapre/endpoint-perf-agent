@@ -17,7 +17,7 @@
     - `./bin/epagent analyze --in tmp/epagent-smoke.jsonl --format json --window 5 --threshold 3 --redact omit`
     - `./bin/epagent report --in tmp/epagent-smoke.jsonl --out - --window 5 --threshold 3 --redact hash`
     - `./bin/epagent watch --duration 2s --interval 1s --process-attribution=false --metrics cpu,mem --sink stdout --min-severity critical --redact omit > tmp/watch-smoke.ndjson`
-- Commit: TBD
+- Commit: `6ef0b86`
 - Confidence: high
 - Trust label: verified-local
 
