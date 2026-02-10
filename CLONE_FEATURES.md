@@ -63,6 +63,7 @@
 - Labels are best treated as stable dimensions (env/service/role/region); per-anomaly labels are still useful for mixed-host sample files, but stable labels make summaries and routing much simpler.
 - Detector normalization must be reflected in user-visible output; otherwise operations teams can misinterpret baselines and thresholds.
 - Line-numbered JSONL parse errors materially reduce diagnosis time for corrupted collection files.
+- Market scan refresh (2026-02-10, untrusted external sources): consistent labeling/tagging keys (env/service/version or equivalent resource attributes) are a baseline expectation for routing and correlation across metrics/logs/traces.
 - Market scan (bounded, untrusted external sources): adjacent tools consistently emphasize (1) enabling/disabling collectors/scrapers to tune overhead, (2) tagging/labeling for multi-host and downstream routing, and (3) interval controls and jitter.
   Sources:
   - Netdata collector configuration: https://learn.netdata.cloud/docs/collecting-metrics/collectors-configuration
@@ -71,8 +72,11 @@
   - Glances CLI + exporters (local-first, multi-output): https://nicolargo.github.io/glances/
   - OpenTelemetry Collector hostmetrics receiver (collection interval + enabled scrapers): https://pkg.go.dev/go.opentelemetry.io/collector/receiver/hostmetricsreceiver
   - OpenTelemetry Collector configuration overview (receivers enabled via pipelines): https://opentelemetry.io/docs/collector/configuration/
+  - OpenTelemetry Resources (custom resource attributes): https://opentelemetry.io/docs/concepts/resources/
+  - OpenTelemetry resource semantic conventions: https://opentelemetry.io/docs/specs/semconv/resource/
   - Telegraf configuration (intervals + tags + plugin filtering): https://docs.influxdata.com/telegraf/v1/configuration/
   - Elastic Metricbeat module config (period + fields + tags): https://www.elastic.co/guide/en/beats/metricbeat/current/configuration-metricbeat.html
+  - Datadog unified service tagging (`env`, `service`, `version`): https://docs.datadoghq.com/getting_started/tagging/unified_service_tagging/
 
 ## Notes
 - This file is maintained by the autonomous clone loop.
