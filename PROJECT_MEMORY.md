@@ -2,6 +2,27 @@
 
 ## Decision Log
 
+### 2026-02-11 - Add static-threshold rules with rule metadata and CLI/config support
+- Decision:
+  - Added static-threshold rules for `watch`, `analyze`, and `report` via config `static_thresholds` and CLI `--static-threshold metric=value` (repeatable).
+  - Added `rule_type` and `threshold` metadata to analysis anomalies and emitted alerts so downstream tooling can distinguish z-score and static-threshold triggers.
+  - Updated report/summary formatting to explain static-threshold findings explicitly and refreshed planning docs to keep backlog realistic.
+- Why: Rolling z-score alone can miss absolute saturation conditions when baselines drift; production operators need absolute guardrails for known ceilings (CPU%, memory%, disk%, throughput).
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/config/config.go`, `internal/anomaly/anomaly.go`, `internal/watch/engine.go`, `internal/report/report.go`, `internal/alert/alert.go`
+  - Tests: `cmd/epagent/main_test.go`, `internal/config/config_test.go`, `internal/anomaly/anomaly_test.go`, `internal/watch/engine_test.go`, `internal/report/report_test.go`
+  - Local smoke:
+    - `./bin/epagent collect --duration 6s --interval 1s --out tmp/static-smoke.jsonl --truncate --process-attribution=false --metrics cpu,mem`
+    - `./bin/epagent analyze --in tmp/static-smoke.jsonl --format json --window 5 --threshold 10 --static-threshold mem=1 --min-severity low > tmp/static-analyze.json`
+    - `./bin/epagent report --in tmp/static-smoke.jsonl --out tmp/static-report.md --window 5 --threshold 10 --static-threshold mem=1 --min-severity low`
+    - `./bin/epagent watch --duration 3s --interval 1s --metrics mem --process-attribution=false --sink stdout --min-severity low --threshold 10 --static-threshold mem=1 > tmp/watch-static.ndjson`
+- Commit: `76f95ad`
+- Confidence: high
+- Trust label: trusted (local code/tests)
+- Additional market context used for prioritization:
+  - Datadog metric/anomaly monitor docs, Telegraf jitter/interval docs, OTel hostmetrics interval docs, Metricbeat period/tag docs.
+  - Trust label: untrusted (external docs/web); used for product-priority heuristics only.
+
 ### 2026-02-10 - Add selftest, output redaction, and safe overwrite for sample files
 - Decision:
   - Add `epagent selftest` to validate host metric availability and estimate sampling overhead (including process attribution overhead probe).
@@ -157,6 +178,19 @@
 - Trust label: verified-local
 
 ## Verification Evidence
+- `gh issue list --state open --limit 100 --json number,title,author,createdAt,labels,url` (pass; no open issues from `sarveshkapre` or trusted bots)
+- `gh run list --limit 12 --branch main --json databaseId,workflowName,status,conclusion,headSha,createdAt,url` (pass; prior runs healthy before implementation)
+- `make check` (pass; static-threshold changes + tests; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
+- `./bin/epagent collect --duration 6s --interval 1s --out tmp/static-smoke.jsonl --truncate --process-attribution=false --metrics cpu,mem` (pass)
+- `./bin/epagent analyze --in tmp/static-smoke.jsonl --format json --window 5 --threshold 10 --static-threshold mem=1 --min-severity low > tmp/static-analyze.json` (pass)
+- `./bin/epagent report --in tmp/static-smoke.jsonl --out tmp/static-report.md --window 5 --threshold 10 --static-threshold mem=1 --min-severity low` (pass)
+- `./bin/epagent watch --duration 3s --interval 1s --metrics mem --process-attribution=false --sink stdout --min-severity low --threshold 10 --static-threshold mem=1 > tmp/watch-static.ndjson` (pass)
+- `rg -n '"rule_type"|"threshold"' tmp/static-analyze.json | head -n 6` (pass; confirms static rule metadata in JSON output)
+- `rg -n 'static threshold' tmp/static-report.md | head -n 3` (pass; confirms markdown static-threshold wording)
+- `head -n 1 tmp/watch-static.ndjson` (pass; confirms alert includes `rule_type=static_threshold` and `threshold`)
+- `gh run view 21895242856 --json status,conclusion,headSha,url,workflowName` (pass; `ci` completed `success` for `76f95ad`)
+- `gh run view 21895242862 --json status,conclusion,headSha,url,workflowName` (pass; `secret-scan` completed `success` for `76f95ad`)
+- `gh run view 21895242864 --json status,conclusion,headSha,url,workflowName` (in_progress at last check for `76f95ad`)
 - `make check` (pass)
 - `make check` (pass; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
 - `make check` (pass; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
