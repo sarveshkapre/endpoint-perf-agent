@@ -36,7 +36,7 @@ func TestAnalyzeDetectsSpike(t *testing.T) {
 		NetTxBytes:      2000,
 	})
 
-	result := Analyze(samples, 5, 2.5)
+	result := Analyze(samples, 5, 2.5, nil)
 	if result.Samples != len(samples) {
 		t.Fatalf("expected %d samples, got %d", len(samples), result.Samples)
 	}
@@ -52,7 +52,7 @@ func TestAnalyzeSortsSamplesByTimestamp(t *testing.T) {
 		{Timestamp: t0, CPUPercent: 10},
 	}
 
-	result := Analyze(samples, 5, 3.0)
+	result := Analyze(samples, 5, 3.0, nil)
 	if result.Duration <= 0 {
 		t.Fatalf("expected positive duration, got %s", result.Duration)
 	}
@@ -96,7 +96,7 @@ func TestAnalyzeComputesBaselinesAndHostID(t *testing.T) {
 		},
 	}
 
-	result := Analyze(samples, 5, 3.0)
+	result := Analyze(samples, 5, 3.0, nil)
 	if result.HostID != "host-01" {
 		t.Fatalf("expected host_id host-01, got %q", result.HostID)
 	}
@@ -164,7 +164,7 @@ func TestAnalyzeNormalizesWindowAndThreshold(t *testing.T) {
 		{Timestamp: t0.Add(1 * time.Second), CPUPercent: 11, MemUsedPercent: 40, DiskUsedPercent: 50},
 	}
 
-	result := Analyze(samples, 1, -5)
+	result := Analyze(samples, 1, -5, nil)
 	if got, want := result.WindowSize, 5; got != want {
 		t.Fatalf("expected normalized window %d, got %d", want, got)
 	}
@@ -215,7 +215,7 @@ func TestAnalyzeAttachesAnomalyProcessContext(t *testing.T) {
 		},
 	})
 
-	result := Analyze(samples, 5, 2.5)
+	result := Analyze(samples, 5, 2.5, nil)
 	if len(result.Anomalies) == 0 {
 		t.Fatal("expected anomaly")
 	}
@@ -267,7 +267,7 @@ func TestAnalyze_RespectsMetricFamilies(t *testing.T) {
 		},
 	}
 
-	result := Analyze(samples, 5, 3.0)
+	result := Analyze(samples, 5, 3.0, nil)
 	if _, ok := result.Baselines["net_rx_bytes_per_sec"]; ok {
 		t.Fatalf("expected net_rx_bytes_per_sec to be absent when net family disabled")
 	}
@@ -279,5 +279,29 @@ func TestAnalyze_RespectsMetricFamilies(t *testing.T) {
 	}
 	if _, ok := result.Baselines["mem_used_percent"]; !ok {
 		t.Fatalf("expected mem_used_percent baseline to exist")
+	}
+}
+
+func TestAnalyze_StaticThresholds(t *testing.T) {
+	t0 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	samples := []collector.MetricSample{
+		{Timestamp: t0, CPUPercent: 10, MemUsedPercent: 40},
+		{Timestamp: t0.Add(1 * time.Second), CPUPercent: 85, MemUsedPercent: 40},
+	}
+
+	result := Analyze(samples, 5, 10.0, map[string]float64{"cpu_percent": 80})
+	if len(result.Anomalies) == 0 {
+		t.Fatalf("expected static-threshold anomaly")
+	}
+	a := result.Anomalies[0]
+	if a.RuleType != "static_threshold" {
+		t.Fatalf("expected static_threshold rule type, got %q", a.RuleType)
+	}
+	if a.Threshold != 80 {
+		t.Fatalf("expected threshold 80, got %v", a.Threshold)
+	}
+	md := FormatMarkdown(result)
+	if !strings.Contains(md, "crossed static threshold") {
+		t.Fatalf("expected markdown to include static threshold wording, got: %s", md)
 	}
 }

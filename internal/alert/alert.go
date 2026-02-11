@@ -16,6 +16,8 @@ type Alert struct {
 	Labels        map[string]string           `json:"labels,omitempty"`
 	Metric        string                      `json:"metric"`
 	Value         float64                     `json:"value"`
+	RuleType      string                      `json:"rule_type,omitempty"`
+	Threshold     float64                     `json:"threshold,omitempty"`
 	Mean          float64                     `json:"mean"`
 	Stddev        float64                     `json:"stddev"`
 	ZScore        float64                     `json:"zscore"`

@@ -44,3 +44,25 @@ func TestDetectorExplainsDirectionForDrops(t *testing.T) {
 		t.Fatalf("expected explanation to mention a drop, got: %q", flagged.Explanation)
 	}
 }
+
+func TestCheckStaticThresholdFlagsExceededValue(t *testing.T) {
+	a := CheckStaticThreshold("cpu_percent", 90, map[string]float64{"cpu_percent": 80})
+	if a == nil {
+		t.Fatalf("expected static-threshold anomaly")
+	}
+	if a.RuleType != RuleTypeStaticThreshold {
+		t.Fatalf("expected static_threshold rule type, got %q", a.RuleType)
+	}
+	if a.Threshold != 80 {
+		t.Fatalf("expected threshold 80, got %v", a.Threshold)
+	}
+}
+
+func TestSelectHigherSeverityPrefersHigherSeverity(t *testing.T) {
+	zscore := &Anomaly{RuleType: RuleTypeZScore, Severity: "medium", ZScore: 3.5}
+	static := &Anomaly{RuleType: RuleTypeStaticThreshold, Severity: "high", ZScore: 0.5}
+	chosen := SelectHigherSeverity(zscore, static)
+	if chosen != static {
+		t.Fatalf("expected higher severity anomaly to be selected")
+	}
+}

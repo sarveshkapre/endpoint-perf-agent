@@ -42,5 +42,5 @@ make release
 
 ## Next 3 improvements
 - Add SQLite storage mode and rotation policies
-- Add static/percentile threshold rule options (beyond z-score)
-- Add `selftest` / overhead benchmarking for quick host readiness checks
+- Add percentile threshold rule options (beyond z-score and static thresholds)
+- Add sampling jitter and per-metric cooldown controls in watch mode

@@ -13,11 +13,18 @@ type ProcessAttribution struct {
 	RSSBytes   uint64  `json:"rss_bytes"`
 }
 
+const (
+	RuleTypeZScore          = "zscore"
+	RuleTypeStaticThreshold = "static_threshold"
+)
+
 type Anomaly struct {
 	Name          string
 	Timestamp     time.Time         `json:"timestamp,omitempty"`
 	Labels        map[string]string `json:"labels,omitempty"`
 	Value         float64
+	RuleType      string  `json:"rule_type,omitempty"`
+	Threshold     float64 `json:"threshold,omitempty"`
 	Mean          float64
 	Stddev        float64
 	ZScore        float64
@@ -57,6 +64,7 @@ func (d *Detector) Check(name string, value float64) *Anomaly {
 			anomaly = &Anomaly{
 				Name:        name,
 				Value:       value,
+				RuleType:    RuleTypeZScore,
 				Mean:        mean,
 				Stddev:      stddev,
 				ZScore:      z,
@@ -105,6 +113,94 @@ func meanStddev(values []float64) (float64, float64) {
 	}
 	variance = variance / float64(len(values))
 	return mean, math.Sqrt(variance)
+}
+
+func CheckStaticThreshold(name string, value float64, thresholds map[string]float64) *Anomaly {
+	if len(thresholds) == 0 {
+		return nil
+	}
+	threshold, ok := thresholds[name]
+	if !ok || threshold <= 0 || value < threshold {
+		return nil
+	}
+	exceedRatio := (value - threshold) / threshold
+	return &Anomaly{
+		Name:        name,
+		Value:       value,
+		RuleType:    RuleTypeStaticThreshold,
+		Threshold:   threshold,
+		Mean:        threshold,
+		Stddev:      0,
+		ZScore:      exceedRatio,
+		Severity:    severityFromExceedRatio(exceedRatio),
+		Explanation: explainStaticThreshold(name, value, threshold, exceedRatio),
+	}
+}
+
+func SelectHigherSeverity(a, b *Anomaly) *Anomaly {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	ar, _ := severityRank(a.Severity)
+	br, _ := severityRank(b.Severity)
+	switch {
+	case br > ar:
+		return b
+	case br < ar:
+		return a
+	}
+
+	az := math.Abs(a.ZScore)
+	bz := math.Abs(b.ZScore)
+	switch {
+	case bz > az:
+		return b
+	case bz < az:
+		return a
+	}
+
+	if a.RuleType == RuleTypeZScore {
+		return a
+	}
+	if b.RuleType == RuleTypeZScore {
+		return b
+	}
+	return a
+}
+
+func severityFromExceedRatio(ratio float64) string {
+	switch {
+	case ratio >= 1.0:
+		return "critical"
+	case ratio >= 0.5:
+		return "high"
+	case ratio >= 0.2:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func severityRank(severity string) (int, bool) {
+	switch severity {
+	case "low":
+		return 1, true
+	case "medium":
+		return 2, true
+	case "high":
+		return 3, true
+	case "critical":
+		return 4, true
+	default:
+		return 0, false
+	}
+}
+
+func explainStaticThreshold(name string, value, threshold, exceedRatio float64) string {
+	return fmt.Sprintf("Static threshold exceeded for %s: value %.2f is above %.2f (%.1f%% over threshold).", name, value, threshold, exceedRatio*100)
 }
 
 func explain(name string, value, mean, z float64) string {

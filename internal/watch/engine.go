@@ -12,16 +12,17 @@ import (
 )
 
 type Engine struct {
-	detector  *anomaly.Detector
-	minRank   int
-	cooldown  time.Duration
-	lastSent  map[string]time.Time
-	prev      *collector.MetricSample
-	window    int
-	threshold float64
+	detector         *anomaly.Detector
+	staticThresholds map[string]float64
+	minRank          int
+	cooldown         time.Duration
+	lastSent         map[string]time.Time
+	prev             *collector.MetricSample
+	window           int
+	threshold        float64
 }
 
-func NewEngine(windowSize int, threshold float64, minSeverity string, cooldown time.Duration) (*Engine, error) {
+func NewEngine(windowSize int, threshold float64, staticThresholds map[string]float64, minSeverity string, cooldown time.Duration) (*Engine, error) {
 	windowSize, threshold = report.NormalizeParams(windowSize, threshold)
 
 	if minSeverity == "" {
@@ -37,12 +38,13 @@ func NewEngine(windowSize int, threshold float64, minSeverity string, cooldown t
 	}
 
 	return &Engine{
-		detector:  anomaly.NewDetector(windowSize, threshold),
-		minRank:   minRank,
-		cooldown:  cooldown,
-		lastSent:  make(map[string]time.Time),
-		window:    windowSize,
-		threshold: threshold,
+		detector:         anomaly.NewDetector(windowSize, threshold),
+		staticThresholds: cloneThresholds(staticThresholds),
+		minRank:          minRank,
+		cooldown:         cooldown,
+		lastSent:         make(map[string]time.Time),
+		window:           windowSize,
+		threshold:        threshold,
 	}, nil
 }
 
@@ -104,7 +106,9 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 
 	alerts := make([]alert.Alert, 0)
 	for name, value := range metrics {
-		a := e.detector.Check(name, value)
+		zScoreAnomaly := e.detector.Check(name, value)
+		staticAnomaly := anomaly.CheckStaticThreshold(name, value, e.staticThresholds)
+		a := anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly)
 		if a == nil {
 			continue
 		}
@@ -129,6 +133,8 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 			Labels:        sample.Labels,
 			Metric:        a.Name,
 			Value:         a.Value,
+			RuleType:      a.RuleType,
+			Threshold:     a.Threshold,
 			Mean:          a.Mean,
 			Stddev:        a.Stddev,
 			ZScore:        a.ZScore,
@@ -159,4 +165,15 @@ func toAnomalyProcess(p *collector.ProcessAttribution) *anomaly.ProcessAttributi
 		CPUPercent: p.CPUPercent,
 		RSSBytes:   p.RSSBytes,
 	}
+}
+
+func cloneThresholds(in map[string]float64) map[string]float64 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]float64, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

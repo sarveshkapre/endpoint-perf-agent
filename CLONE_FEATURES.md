@@ -7,20 +7,30 @@
 - Gaps found during codebase exploration
 
 ## Candidate Features To Do
-- [ ] P2 Add configurable static-threshold alert rules (in addition to z-score), selectable per metric family.
-  Score: impact medium | effort medium | strategic fit medium | differentiation medium | risk medium | confidence medium
-- [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline) selectable per metric family.
-  Score: impact medium | effort high | strategic fit medium | differentiation medium | risk medium | confidence medium
+- [ ] P2 Add percentile-based alert rules (p95/p99 vs rolling baseline), selectable per metric family.
+  Score: impact medium | effort high | strategic fit high | differentiation medium | risk medium | confidence medium
 - [ ] P2 Optional SQLite storage mode with retention controls and a migration path from JSONL.
   Score: impact medium | effort high | strategic fit medium | differentiation low | risk medium | confidence medium
 - [ ] P2 Add sampling jitter (bounded) to reduce synchronized collection across hosts.
-  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
-- [ ] P3 Add a `redact` subcommand to transform an existing JSONL file (omit/hash sensitive fields) for sharing without re-running `analyze`/`report`.
-  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence low
-- [ ] P3 Improve build noise: investigate/suppress toolchain warnings from dependencies during `go test` on Apple Silicon without hiding real errors.
-  Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence low
+  Score: impact medium | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P2 Add per-metric cooldown overrides in `watch` to reduce alert suppression for high-value signals.
+  Score: impact medium | effort medium | strategic fit high | differentiation low | risk low | confidence medium
+- [ ] P2 Add startup warm-up controls (`--warmup-samples`) to suppress noisy early-window anomalies.
+  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence high
+- [ ] P2 Add anomaly report grouping by metric family and severity counts for faster incident triage.
+  Score: impact medium | effort low | strategic fit high | differentiation low | risk low | confidence high
+- [ ] P3 Add a `redact` subcommand to transform existing JSONL files (omit/hash sensitive fields) for sharing without rerunning analysis.
+  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P3 Improve build noise: investigate/suppress dependency toolchain warnings on Apple Silicon without hiding real errors.
+  Score: impact low | effort low | strategic fit low | differentiation none | risk low | confidence medium
+- [ ] P3 Add benchmark coverage for process attribution overhead by process-count tiers.
+  Score: impact low | effort medium | strategic fit medium | differentiation low | risk low | confidence medium
+- [ ] P3 Add deterministic label ordering for all text/markdown output paths.
+  Score: impact low | effort low | strategic fit medium | differentiation none | risk low | confidence high
 
 ## Implemented
+- [x] 2026-02-11: Added configurable static-threshold rules across `watch`, `analyze`, and `report` (config `static_thresholds` + CLI `--static-threshold metric=value`) with normalized metric aliases, strict validation, and output metadata (`rule_type`, `threshold`).
+  Evidence: `internal/config/config.go`, `internal/anomaly/anomaly.go`, `internal/watch/engine.go`, `internal/report/report.go`, `internal/alert/alert.go`, `cmd/epagent/main.go`, tests in `internal/config/config_test.go`, `internal/anomaly/anomaly_test.go`, `internal/watch/engine_test.go`, `internal/report/report_test.go`, `cmd/epagent/main_test.go`, verification `make check`, `collect/analyze/report/watch` smoke commands on `tmp/static-*.json*`.
 - [x] 2026-02-10: Added `selftest` command to validate host metric availability/permissions and estimate sampling overhead (including optional process attribution overhead probe).
   Evidence: `cmd/epagent/main.go`, `internal/selftest/selftest.go`, `README.md`, `docs/CHANGELOG.md`, `make check`, local smoke `./bin/epagent selftest --runs 1`.
 - [x] 2026-02-10: Added `--redact omit|hash` for `analyze`/`report` outputs and `watch` alerts to omit/hash `host_id` and labels for sharing.
@@ -69,6 +79,18 @@
 - Labels are best treated as stable dimensions (env/service/role/region); per-anomaly labels are still useful for mixed-host sample files, but stable labels make summaries and routing much simpler.
 - Detector normalization must be reflected in user-visible output; otherwise operations teams can misinterpret baselines and thresholds.
 - Line-numbered JSONL parse errors materially reduce diagnosis time for corrupted collection files.
+- Gap map refresh (2026-02-11):
+  - Missing (now shipped): static absolute thresholds in addition to baseline-relative z-score rules.
+  - Weak: jitter and alert cooldown tuning are still global (no per-metric tuning).
+  - Parity: metric-family enable/disable, labels/tags, rolling baseline explainers, NDJSON/syslog alert sinks.
+  - Differentiator opportunity: lightweight offline-first percentile rules with share-safe redaction and report-grade explanations.
+- Market scan refresh (2026-02-11, untrusted external sources): operator baselines consistently include static threshold monitors, anomaly/percentile monitors, collection jitter knobs, and tunable collection intervals/tags.
+  Sources:
+  - Datadog metric threshold monitor docs: https://docs.datadoghq.com/monitors/types/metric/
+  - Datadog anomaly monitor docs: https://docs.datadoghq.com/monitors/types/anomaly/
+  - Telegraf configuration (`collection_jitter`, intervals, tags): https://docs.influxdata.com/telegraf/v1/configuration/
+  - OpenTelemetry Collector config + hostmetrics receiver (`collection_interval`): https://opentelemetry.io/docs/collector/configuration/ and https://pkg.go.dev/go.opentelemetry.io/collector/receiver/hostmetricsreceiver
+  - Elastic Metricbeat module config (`period`, tags/fields): https://www.elastic.co/guide/en/beats/metricbeat/current/configuration-metricbeat.html
 - Market scan refresh (2026-02-10, untrusted external sources): consistent labeling/tagging keys (env/service/version or equivalent resource attributes) are a baseline expectation for routing and correlation across metrics/logs/traces.
 - Market scan (bounded, untrusted external sources): adjacent tools consistently emphasize (1) enabling/disabling collectors/scrapers to tune overhead, (2) tagging/labeling for multi-host and downstream routing, and (3) interval controls and jitter.
   Sources:

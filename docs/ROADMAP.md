@@ -6,5 +6,6 @@
 
 ## Next
 - Optional SQLite storage
-- Static-threshold and percentile-based alert rules
+- Percentile-based alert rules
 - Sampling jitter to avoid synchronized collection across hosts
+- Per-metric cooldown overrides for watch mode

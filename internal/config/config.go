@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,27 +33,29 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval           time.Duration     `json:"-"`
-	Duration           time.Duration     `json:"-"`
-	WindowSize         int               `json:"window_size"`
-	ZScoreThreshold    float64           `json:"zscore_threshold"`
-	OutputPath         string            `json:"output_path"`
-	HostID             string            `json:"host_id"`
-	Labels             map[string]string `json:"-"`
-	ProcessAttribution bool              `json:"process_attribution"`
-	Metrics            MetricFamilies    `json:"-"`
+	Interval           time.Duration      `json:"-"`
+	Duration           time.Duration      `json:"-"`
+	WindowSize         int                `json:"window_size"`
+	ZScoreThreshold    float64            `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64 `json:"-"`
+	OutputPath         string             `json:"output_path"`
+	HostID             string             `json:"host_id"`
+	Labels             map[string]string  `json:"-"`
+	ProcessAttribution bool               `json:"process_attribution"`
+	Metrics            MetricFamilies     `json:"-"`
 }
 
 type fileConfig struct {
-	Interval           Duration          `json:"interval"`
-	Duration           Duration          `json:"duration"`
-	WindowSize         int               `json:"window_size"`
-	ZScoreThreshold    float64           `json:"zscore_threshold"`
-	OutputPath         string            `json:"output_path"`
-	HostID             string            `json:"host_id"`
-	Labels             map[string]string `json:"labels"`
-	ProcessAttribution *bool             `json:"process_attribution"`
-	EnabledMetrics     *[]string         `json:"enabled_metrics"`
+	Interval           Duration           `json:"interval"`
+	Duration           Duration           `json:"duration"`
+	WindowSize         int                `json:"window_size"`
+	ZScoreThreshold    float64            `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64 `json:"static_thresholds"`
+	OutputPath         string             `json:"output_path"`
+	HostID             string             `json:"host_id"`
+	Labels             map[string]string  `json:"labels"`
+	ProcessAttribution *bool              `json:"process_attribution"`
+	EnabledMetrics     *[]string          `json:"enabled_metrics"`
 }
 
 type MetricFamilies struct {
@@ -104,6 +108,13 @@ func Load(path string) (Config, error) {
 	}
 	if fc.ZScoreThreshold != 0 {
 		cfg.ZScoreThreshold = fc.ZScoreThreshold
+	}
+	if fc.StaticThresholds != nil {
+		thresholds, err := ParseStaticThresholds(fc.StaticThresholds)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.StaticThresholds = thresholds
 	}
 	if fc.OutputPath != "" {
 		cfg.OutputPath = fc.OutputPath
@@ -177,5 +188,53 @@ func normalizeMetricName(s string) string {
 		return "net"
 	default:
 		return s
+	}
+}
+
+func ParseStaticThresholds(in map[string]float64) (map[string]float64, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]float64, len(in))
+	for rawName, threshold := range in {
+		name, ok := normalizeStaticThresholdMetricName(rawName)
+		if !ok {
+			return nil, &StaticThresholdMetricError{Name: rawName}
+		}
+		if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold <= 0 {
+			return nil, fmt.Errorf("static threshold for %s must be greater than zero", name)
+		}
+		out[name] = threshold
+	}
+	return out, nil
+}
+
+type StaticThresholdMetricError struct {
+	Name string
+}
+
+func (e *StaticThresholdMetricError) Error() string {
+	return "unknown static threshold metric: " + e.Name + " (expected cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)"
+}
+
+func normalizeStaticThresholdMetricName(s string) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "cpu", "cpu_percent":
+		return "cpu_percent", true
+	case "mem", "memory", "mem_used_percent":
+		return "mem_used_percent", true
+	case "disk", "disk_used", "disk_used_percent":
+		return "disk_used_percent", true
+	case "disk_read", "disk_read_bps", "disk_read_bytes_per_sec":
+		return "disk_read_bytes_per_sec", true
+	case "disk_write", "disk_write_bps", "disk_write_bytes_per_sec":
+		return "disk_write_bytes_per_sec", true
+	case "net_rx", "network_rx", "net_rx_bps", "net_rx_bytes_per_sec":
+		return "net_rx_bytes_per_sec", true
+	case "net_tx", "network_tx", "net_tx_bps", "net_tx_bytes_per_sec":
+		return "net_tx_bytes_per_sec", true
+	default:
+		return "", false
 	}
 }

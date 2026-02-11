@@ -1,3 +1,24 @@
+# Update (2026-02-11)
+
+## Shipped
+- Added configurable static-threshold alert rules across `watch`, `analyze`, and `report`:
+  - config `static_thresholds` (with canonical metric normalization/validation)
+  - CLI `--static-threshold metric=value` (repeatable)
+- Added anomaly/alert metadata fields for machine consumers:
+  - `rule_type` (`zscore` or `static_threshold`)
+  - `threshold` (when static-threshold rule triggered)
+- Updated Markdown and summary formatting to describe static-threshold anomalies clearly.
+
+## Verify
+- `make check`
+- `./bin/epagent collect --duration 6s --interval 1s --out tmp/static-smoke.jsonl --truncate --process-attribution=false --metrics cpu,mem`
+- `./bin/epagent analyze --in tmp/static-smoke.jsonl --format json --window 5 --threshold 10 --static-threshold mem=1 --min-severity low > tmp/static-analyze.json`
+- `./bin/epagent report --in tmp/static-smoke.jsonl --out tmp/static-report.md --window 5 --threshold 10 --static-threshold mem=1 --min-severity low`
+- `./bin/epagent watch --duration 3s --interval 1s --metrics mem --process-attribution=false --sink stdout --min-severity low --threshold 10 --static-threshold mem=1 > tmp/watch-static.ndjson`
+
+## Notes
+- No external API integration was changed; external integration smoke checks are not applicable for this update.
+
 # Update (2026-02-10)
 
 ## Shipped

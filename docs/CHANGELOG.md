@@ -26,3 +26,5 @@
 - Added `selftest` command to validate host metric availability and estimate collection overhead.
 - Added `--redact omit|hash` for `analyze`/`report` outputs and `watch` alerts to omit/hash `host_id` and labels for sharing.
 - Added `collect --truncate` and `watch --out ... --truncate` to overwrite sample files instead of appending.
+- Added configurable static-threshold rules via config `static_thresholds` and CLI `--static-threshold metric=value` for `watch`/`analyze`/`report`.
+- Added anomaly/alert rule metadata (`rule_type`, `threshold`) so NDJSON/JSON outputs can distinguish z-score and static-threshold triggers.

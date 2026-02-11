@@ -8,7 +8,7 @@ import (
 )
 
 func TestEngine_EmitsAlert(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, "low", 0)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestEngine_EmitsAlert(t *testing.T) {
 }
 
 func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, "low", time.Minute)
+	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -92,14 +92,14 @@ func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
 }
 
 func TestNewEngine_RejectsUnknownSeverity(t *testing.T) {
-	_, err := NewEngine(5, 3.0, "nope", 0)
+	_, err := NewEngine(5, 3.0, nil, "nope", 0)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
 }
 
 func TestEngine_RespectsMetricFamilies(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, "low", 0)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -125,5 +125,33 @@ func TestEngine_RespectsMetricFamilies(t *testing.T) {
 	}
 	if gotCPU {
 		t.Fatalf("expected no cpu_percent alerts when CPU family is disabled")
+	}
+}
+
+func TestEngine_EmitsStaticThresholdAlert(t *testing.T) {
+	engine, err := NewEngine(5, 10.0, map[string]float64{"cpu_percent": 50}, "low", 0)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	base := time.Date(2026, 2, 9, 0, 0, 0, 0, time.UTC)
+	_ = engine.Observe(collector.MetricSample{
+		Timestamp:      base,
+		CPUPercent:     10,
+		MemUsedPercent: 20,
+	})
+	alerts := engine.Observe(collector.MetricSample{
+		Timestamp:      base.Add(time.Second),
+		CPUPercent:     70,
+		MemUsedPercent: 20,
+	})
+	if len(alerts) == 0 {
+		t.Fatalf("expected static-threshold alert")
+	}
+	if alerts[0].RuleType != "static_threshold" {
+		t.Fatalf("expected static_threshold rule type, got %q", alerts[0].RuleType)
+	}
+	if alerts[0].Threshold != 50 {
+		t.Fatalf("expected threshold 50, got %v", alerts[0].Threshold)
 	}
 }

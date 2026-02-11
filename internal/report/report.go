@@ -39,7 +39,7 @@ type AnalysisResult struct {
 	LastTimestamp   time.Time
 }
 
-func Analyze(samples []collector.MetricSample, windowSize int, threshold float64) AnalysisResult {
+func Analyze(samples []collector.MetricSample, windowSize int, threshold float64, staticThresholds map[string]float64) AnalysisResult {
 	windowSize, threshold = NormalizeParams(windowSize, threshold)
 	result := AnalysisResult{
 		Samples:         len(samples),
@@ -116,7 +116,9 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 
 		for name, value := range metrics {
 			metricValues[name] = append(metricValues[name], value)
-			if a := detector.Check(name, value); a != nil {
+			zScoreAnomaly := detector.Check(name, value)
+			staticAnomaly := anomaly.CheckStaticThreshold(name, value, staticThresholds)
+			if a := anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly); a != nil {
 				a.Timestamp = current.Timestamp
 				a.Labels = cloneLabels(current.Labels)
 				a.TopCPUProcess = toAnomalyProcess(current.TopCPUProcess)
@@ -190,7 +192,17 @@ func FormatSummary(result AnalysisResult) string {
 	}
 	b.WriteString("Top anomalies:\n")
 	for _, a := range top {
-		fmt.Fprintf(&b, "- %s: %.2f (z=%.2f, %s)%s\n", a.Name, a.Value, a.ZScore, a.Severity, formatAnomalyContextInline(a))
+		if a.RuleType == anomaly.RuleTypeStaticThreshold {
+			fmt.Fprintf(&b, "- %s: %s (static threshold %s, %s)%s\n",
+				a.Name,
+				formatMetricValue(a.Name, a.Value),
+				formatMetricValue(a.Name, a.Threshold),
+				a.Severity,
+				formatAnomalyContextInline(a),
+			)
+			continue
+		}
+		fmt.Fprintf(&b, "- %s: %s (z=%.2f, %s)%s\n", a.Name, formatMetricValue(a.Name, a.Value), a.ZScore, a.Severity, formatAnomalyContextInline(a))
 	}
 	return b.String()
 }
@@ -245,6 +257,17 @@ func FormatMarkdown(result AnalysisResult) string {
 	b.WriteString("## Anomalies\n")
 	sort.Slice(result.Anomalies, func(i, j int) bool { return abs(result.Anomalies[i].ZScore) > abs(result.Anomalies[j].ZScore) })
 	for _, a := range result.Anomalies {
+		if a.RuleType == anomaly.RuleTypeStaticThreshold {
+			fmt.Fprintf(&b, "- **%s**: value %s crossed static threshold %s (%s). %s%s\n",
+				a.Name,
+				formatMetricValue(a.Name, a.Value),
+				formatMetricValue(a.Name, a.Threshold),
+				a.Severity,
+				a.Explanation,
+				formatAnomalyContextParagraph(a),
+			)
+			continue
+		}
 		fmt.Fprintf(&b, "- **%s**: value %s (baseline %s ± %s, z=%.2f, %s). %s%s\n",
 			a.Name,
 			formatMetricValue(a.Name, a.Value),

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -207,6 +208,8 @@ func runAnalyze(args []string) error {
 	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
 	var metricFamilies stringListFlag
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
+	var staticThresholds staticThresholdsFlag
+	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
 	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
@@ -285,7 +288,11 @@ func runAnalyze(args []string) error {
 	}
 
 	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
-	result := report.Analyze(samples, windowSize, zScoreThreshold)
+	mergedStaticThresholds := cfg.StaticThresholds
+	if staticThresholds.Any() {
+		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
+	}
+	result := report.Analyze(samples, windowSize, zScoreThreshold, mergedStaticThresholds)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
@@ -342,6 +349,8 @@ func runAnalyze(args []string) error {
 				Labels:        labels,
 				Metric:        a.Name,
 				Value:         a.Value,
+				RuleType:      a.RuleType,
+				Threshold:     a.Threshold,
 				Mean:          a.Mean,
 				Stddev:        a.Stddev,
 				ZScore:        a.ZScore,
@@ -384,6 +393,8 @@ func runWatch(args []string) error {
 	redactMode := fs.String("redact", "", "Redact sensitive fields in alerts: omit|hash (empty = no redaction)")
 	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
+	var staticThresholds staticThresholdsFlag
+	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -426,6 +437,10 @@ func runWatch(args []string) error {
 		}
 		cfg.Metrics = m
 	}
+	mergedStaticThresholds := cfg.StaticThresholds
+	if staticThresholds.Any() {
+		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
+	}
 
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be greater than zero")
@@ -448,7 +463,7 @@ func runWatch(args []string) error {
 
 	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
-	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, *minSeverity, *cooldown)
+	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown)
 	if err != nil {
 		return err
 	}
@@ -529,6 +544,8 @@ func runReport(args []string) error {
 	untilStr := fs.String("until", "", "Include samples at or before this RFC3339 timestamp (e.g. 2026-02-09T00:01:00Z)")
 	var metricFamilies stringListFlag
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
+	var staticThresholds staticThresholdsFlag
+	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
 	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -605,7 +622,11 @@ func runReport(args []string) error {
 	}
 
 	windowSize, zScoreThreshold := report.NormalizeParams(cfg.WindowSize, cfg.ZScoreThreshold)
-	result := report.Analyze(samples, windowSize, zScoreThreshold)
+	mergedStaticThresholds := cfg.StaticThresholds
+	if staticThresholds.Any() {
+		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
+	}
+	result := report.Analyze(samples, windowSize, zScoreThreshold, mergedStaticThresholds)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
@@ -845,5 +866,81 @@ func (f *stringListFlag) Values() []string {
 	}
 	out := make([]string, len(f.values))
 	copy(out, f.values)
+	return out
+}
+
+type staticThresholdsFlag struct {
+	m map[string]float64
+}
+
+func (f *staticThresholdsFlag) String() string {
+	if len(f.m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(f.m))
+	for k, v := range f.m {
+		parts = append(parts, fmt.Sprintf("%s=%g", k, v))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *staticThresholdsFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	name, rawThreshold, ok := strings.Cut(value, "=")
+	if !ok {
+		return fmt.Errorf("static-threshold must be in metric=value form: %q", value)
+	}
+	name = strings.TrimSpace(name)
+	rawThreshold = strings.TrimSpace(rawThreshold)
+	if name == "" || rawThreshold == "" {
+		return fmt.Errorf("static-threshold must be in metric=value form: %q", value)
+	}
+	parsed, err := strconv.ParseFloat(rawThreshold, 64)
+	if err != nil {
+		return fmt.Errorf("invalid static threshold value for %s: %w", name, err)
+	}
+	normalized, err := config.ParseStaticThresholds(map[string]float64{name: parsed})
+	if err != nil {
+		return err
+	}
+	if f.m == nil {
+		f.m = make(map[string]float64)
+	}
+	for k, v := range normalized {
+		f.m[k] = v
+	}
+	return nil
+}
+
+func (f *staticThresholdsFlag) Any() bool { return len(f.m) > 0 }
+
+func (f *staticThresholdsFlag) Values() map[string]float64 {
+	if len(f.m) == 0 {
+		return nil
+	}
+	out := make(map[string]float64, len(f.m))
+	for k, v := range f.m {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeStaticThresholds(base, extra map[string]float64) map[string]float64 {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]float64, len(base)+len(extra))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
 }

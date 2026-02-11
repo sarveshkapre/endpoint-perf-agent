@@ -64,6 +64,13 @@ func TestAnalyze_RejectsUnknownRedactMode(t *testing.T) {
 	}
 }
 
+func TestAnalyze_RejectsUnknownStaticThresholdMetric(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--static-threshold", "nope=1"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestAnalyze_RejectsInvalidSince(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runAnalyze([]string{"--in", in, "--since", "nope"}); err == nil {
@@ -134,6 +141,13 @@ func TestReport_RejectsUnknownRedactMode(t *testing.T) {
 	}
 }
 
+func TestReport_AcceptsStaticThreshold(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runReport([]string{"--in", in, "--out", "-", "--static-threshold", "cpu=10"}); err != nil {
+		t.Fatalf("runReport: %v", err)
+	}
+}
+
 func TestReport_LastCannotCombineUntil(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runReport([]string{"--in", in, "--out", "-", "--last", "1s", "--until", "2026-02-09T00:00:02Z"}); err == nil {
@@ -161,6 +175,12 @@ func TestWatch_RejectsUnknownMetrics(t *testing.T) {
 
 func TestWatch_RejectsUnknownRedactMode(t *testing.T) {
 	if err := runWatch([]string{"--duration", "1s", "--redact", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestWatch_RejectsInvalidStaticThreshold(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--static-threshold", "cpu=0"}); err == nil {
 		t.Fatalf("expected error")
 	}
 }
