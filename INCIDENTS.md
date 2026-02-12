@@ -24,3 +24,14 @@
   - Execute dependent smoke checks in strict sequence.
   - Reserve parallel execution for independent reads/checks only.
 - Status: resolved
+
+### 2026-02-12T20:01:34Z | Codex execution failure
+- Date: 2026-02-12T20:01:34Z
+- Trigger: Codex execution failure
+- Impact: Repo session did not complete cleanly
+- Root Cause: codex exec returned a non-zero status
+- Fix: Captured failure logs and kept repository in a recoverable state
+- Prevention Rule: Re-run with same pass context and inspect pass log before retrying
+- Evidence: pass_log=logs/20260212-101456-endpoint-perf-agent-cycle-2.log
+- Commit: pending
+- Confidence: medium
