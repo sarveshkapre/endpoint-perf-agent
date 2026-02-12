@@ -189,3 +189,14 @@
 - Evidence: pass_log=logs/20260212-101456-endpoint-perf-agent-cycle-16.log
 - Commit: pending
 - Confidence: medium
+
+### 2026-02-12T20:54:03Z | Codex execution failure
+- Date: 2026-02-12T20:54:03Z
+- Trigger: Codex execution failure
+- Impact: Repo session did not complete cleanly
+- Root Cause: codex exec returned a non-zero status
+- Fix: Captured failure logs and kept repository in a recoverable state
+- Prevention Rule: Re-run with same pass context and inspect pass log before retrying
+- Evidence: pass_log=logs/20260212-101456-endpoint-perf-agent-cycle-17.log
+- Commit: pending
+- Confidence: medium
