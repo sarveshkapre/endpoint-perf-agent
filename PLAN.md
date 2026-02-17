@@ -36,10 +36,10 @@ Try it:
 - 2026-02-01: Baseline summaries (mean/stddev/min/max) in Markdown and JSON outputs.
 
 ## Next to ship (tight scope)
-- Optional SQLite storage with simple retention controls.
-- Percentile-based alert rules.
-- Sampling jitter to reduce synchronized collection across hosts.
-- Per-metric cooldown overrides for watch mode.
+- Percentile lower-bound rules for sudden drops and brownouts.
+- Time-aware/seasonal baselines to reduce false positives.
+- SQLite retention TTL and compaction controls.
+- Optional OpenTelemetry export for anomaly events.
 
 ## Bigger ideas (tracked)
 See `docs/ROADMAP.md`.

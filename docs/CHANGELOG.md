@@ -1,6 +1,11 @@
 # CHANGELOG
 
 ## Unreleased
+- Added sampling jitter support (`sampling_jitter`, `collect/watch --jitter`) to reduce synchronized host sampling.
+- Added per-metric cooldown overrides for watch mode via config `cooldowns` and CLI `--metric-cooldown metric=duration`.
+- Added percentile-threshold alert rules via config `percentile_thresholds` and CLI `--percentile-threshold metric=percentile,multiplier`.
+- Added optional SQLite storage for samples (`--storage sqlite`) with retention pruning (`--max-samples`) and truncate support.
+- Added automatic SQLite input support for `analyze`/`report` when `--in` points to `.db`/`.sqlite`/`.sqlite3`.
 - Implemented sampling, anomaly detection, and report generation.
 - Added CLI commands and JSONL storage.
 - `analyze --format json` for machine-readable output.

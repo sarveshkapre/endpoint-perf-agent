@@ -10,10 +10,13 @@ Cross-platform endpoint performance agent that samples CPU/memory/disk/network m
 ## Features
 - CPU, memory, disk, and network sampling (cross-platform via gopsutil).
 - Metric family allow-listing (cpu/mem/disk/net) to tune overhead and reduce noise.
+- Sampling jitter (`--jitter` / `sampling_jitter`) to reduce synchronized scrapes across hosts.
 - Per-sample top CPU and top memory process attribution for triage context.
 - Rolling z-score anomaly detection with severity levels.
 - Optional static-threshold alert rules for absolute ceilings (e.g., CPU > 85%).
-- JSONL storage for easy ingestion.
+- Optional percentile-threshold alert rules (e.g., alert when value exceeds `p95 * 1.2`).
+- Per-metric cooldown overrides for watch mode (`cooldowns` / `--metric-cooldown`).
+- JSONL or SQLite storage with optional SQLite retention pruning (`--storage sqlite --max-samples N`).
 - Markdown/JSON analysis output with anomaly timestamps, process context, and baseline summaries.
 
 ## Quickstart
@@ -42,6 +45,7 @@ Create a JSON config and pass it to `collect` with `--config`.
 ```json
 {
   "interval": "5s",
+  "sampling_jitter": "500ms",
   "duration": "1m",
   "enabled_metrics": ["cpu", "mem", "disk", "net"],
   "window_size": 30,
@@ -49,6 +53,12 @@ Create a JSON config and pass it to `collect` with `--config`.
   "static_thresholds": {
     "cpu_percent": 85,
     "mem_used_percent": 90
+  },
+  "cooldowns": {
+    "cpu": "5s"
+  },
+  "percentile_thresholds": {
+    "cpu": { "percentile": 95, "multiplier": 1.2 }
   },
   "output_path": "data/metrics.jsonl",
   "host_id": "laptop-01",
@@ -64,16 +74,21 @@ You can add/override labels at runtime with `--label k=v` (repeatable) on `colle
 epagent collect --once
 epagent collect --once --out -
 epagent collect --duration 60s --out data/metrics.jsonl --truncate
+epagent collect --duration 60s --out data/metrics.db --storage sqlite --max-samples 10000 --truncate
 epagent collect --once --host-id laptop-01
 epagent collect --duration 60s --label env=prod --label service=api
 epagent collect --duration 60s --metrics cpu,mem
+epagent collect --duration 60s --interval 2s --jitter 300ms
 epagent watch --min-severity high --sink stdout
 epagent watch --duration 60s --host-id laptop-01 --metrics cpu,mem --sink stdout
 epagent watch --duration 60s --label env=prod --label service=api --sink stdout
 epagent watch --duration 60s --metrics cpu,mem --sink syslog
 epagent watch --duration 60s --metrics cpu,mem --static-threshold cpu=85 --sink stdout
+epagent watch --duration 60s --metrics cpu,mem --jitter 300ms --metric-cooldown cpu=0s --sink stdout
+epagent watch --duration 60s --metrics cpu,mem --percentile-threshold cpu=95,1.2 --sink stdout
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 3
 epagent analyze --in data/metrics.jsonl --window 30 --threshold 10 --static-threshold mem=90
+epagent analyze --in data/metrics.db --window 30 --threshold 10 --percentile-threshold cpu=95,1.2
 epagent analyze --in data/metrics.jsonl --format json  # includes baselines
 epagent analyze --in data/metrics.jsonl --format ndjson --sink stdout  # one alert per line
 epagent analyze --in data/metrics.jsonl --metric cpu --metric net  # filter output by metric family
@@ -87,6 +102,7 @@ epagent report --in data/metrics.jsonl --since 2026-02-09T00:00:00Z --until 2026
 epagent report --in data/metrics.jsonl --metric cpu --out -  # filter output by metric family
 epagent report --in data/metrics.jsonl --last 10m --out -
 epagent report --in data/metrics.jsonl --window 30 --threshold 10 --static-threshold disk_used_percent=80 --out -
+epagent report --in data/metrics.db --window 30 --threshold 10 --percentile-threshold cpu=95,1.2 --out -
 epagent report --out -
 epagent report --in data/metrics.jsonl --out - --redact hash  # hash host_id/labels for sharing
 epagent selftest --format json --runs 3 --timeout 2s

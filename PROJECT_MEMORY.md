@@ -2,6 +2,26 @@
 
 ## Decision Log
 
+### 2026-02-17 - Add jitter, per-metric cooldown overrides, percentile rules, and SQLite sample storage
+- Decision:
+  - Added sampling jitter controls to `collect` and `watch` (`sampling_jitter`, `--jitter`) to reduce synchronized host sampling.
+  - Added per-metric cooldown override support for `watch` via config `cooldowns` and CLI `--metric-cooldown metric=duration`.
+  - Added percentile-threshold rules for `watch`, `analyze`, and `report` via config `percentile_thresholds` and CLI `--percentile-threshold metric=percentile,multiplier`.
+  - Added optional SQLite sample storage (`--storage sqlite`) with retention pruning (`--max-samples`) and auto-read support for `analyze`/`report` when input ends in `.db`/`.sqlite`/`.sqlite3`.
+- Why: These features close the previously tracked production-readiness gaps (de-synchronized sampling, finer watch dedupe controls, dynamic thresholding, and durable local storage with bounded growth).
+- Evidence:
+  - Code: `cmd/epagent/main.go`, `internal/watch/engine.go`, `internal/watch/run.go`, `internal/report/report.go`, `internal/config/config.go`, `internal/storage/storage.go`, `internal/storage/sqlite.go`, `internal/anomaly/anomaly.go`
+  - Tests: `cmd/epagent/main_test.go`, `internal/watch/engine_test.go`, `internal/watch/run_test.go`, `internal/report/report_test.go`, `internal/config/config_test.go`, `internal/storage/storage_test.go`, `internal/anomaly/anomaly_test.go`
+  - Commits: `b2620da`, `ed12127`, `8729e14`, `4639f22`, `b7a8c27`, `d12b950`, `52b06c3`, `1db558c`, `9818018`
+- Confidence: high
+- Trust label: verified-local
+- Additional market context used for prioritization:
+  - Telegraf interval jitter guidance: https://docs.influxdata.com/telegraf/v1/configuration/
+  - Prometheus percentile/quantile query guidance: https://prometheus.io/docs/prometheus/latest/querying/functions/
+  - Elastic Metricbeat collection period controls: https://www.elastic.co/docs/reference/beats/metricbeat/configuration-general-options
+  - OTel host-metrics collection interval patterns: https://opentelemetry.io/docs/platforms/kubernetes/helm/collector/
+  - Trust label: untrusted (external docs/web); used for product-priority heuristics only.
+
 ### 2026-02-11 - Add static-threshold rules with rule metadata and CLI/config support
 - Decision:
   - Added static-threshold rules for `watch`, `analyze`, and `report` via config `static_thresholds` and CLI `--static-threshold metric=value` (repeatable).
@@ -178,6 +198,16 @@
 - Trust label: verified-local
 
 ## Verification Evidence
+- `make check` (pass; runs `gofmt` check, `go vet`, typecheck, full tests, build; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)
+- `go test ./internal/anomaly ./internal/watch ./internal/config ./internal/report ./cmd/epagent` (pass)
+- `go test ./internal/storage` (pass)
+- `./bin/epagent collect --duration 4s --interval 1s --jitter 200ms --out tmp/smoke-sqlite.db --storage sqlite --max-samples 3 --truncate --process-attribution=false --metrics cpu,mem` (pass)
+- `./bin/epagent analyze --in tmp/smoke-sqlite.db --format json --window 5 --threshold 10 --static-threshold mem=1 --percentile-threshold cpu=95,1.1 --min-severity low > tmp/smoke-sqlite-analyze.json` (pass)
+- `./bin/epagent report --in tmp/smoke-sqlite.db --out tmp/smoke-sqlite-report.md --window 5 --threshold 10 --static-threshold mem=1 --percentile-threshold cpu=95,1.1 --min-severity low` (pass)
+- `./bin/epagent watch --duration 3s --interval 1s --jitter 200ms --metrics cpu,mem --process-attribution=false --sink stdout --min-severity low --threshold 10 --static-threshold mem=1 --percentile-threshold cpu=95,1.1 --metric-cooldown cpu=0s > tmp/watch-sqlite.ndjson` (pass)
+- `rg -n '"samples"|"rule_type"|"threshold"' tmp/smoke-sqlite-analyze.json | head -n 12` (pass; confirms SQLite retention via `"samples": 3` and mixed static/percentile rule metadata)
+- `rg -n 'percentile threshold|static threshold|Anomalies' tmp/smoke-sqlite-report.md | head -n 12` (pass; confirms markdown output includes both rule families)
+- `head -n 2 tmp/watch-sqlite.ndjson` (pass; confirms watch NDJSON includes percentile and static alerts)
 - `gh issue list --state open --limit 100 --json number,title,author,createdAt,labels,url` (pass; no open issues from `sarveshkapre` or trusted bots)
 - `gh run list --limit 12 --branch main --json databaseId,workflowName,status,conclusion,headSha,createdAt,url` (pass; prior runs healthy before implementation)
 - `make check` (pass; static-threshold changes + tests; warnings from `github.com/shoenig/go-m1cpu` on Apple Silicon)

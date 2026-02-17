@@ -5,7 +5,7 @@
 - CI with security checks
 
 ## Next
-- Optional SQLite storage
-- Percentile-based alert rules
-- Sampling jitter to avoid synchronized collection across hosts
-- Per-metric cooldown overrides for watch mode
+- Add percentile rule lower-bound support (for drop anomalies)
+- Add adaptive baselines (time-of-day/week-part aware windows)
+- Add SQLite retention policy variants (time-based TTL in addition to max rows)
+- Add optional OpenTelemetry export mode for anomaly events

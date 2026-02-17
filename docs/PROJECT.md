@@ -41,6 +41,6 @@ make release
 ```
 
 ## Next 3 improvements
-- Add SQLite storage mode and rotation policies
-- Add percentile threshold rule options (beyond z-score and static thresholds)
-- Add sampling jitter and per-metric cooldown controls in watch mode
+- Add percentile lower-bound rules for sudden drops (not just spikes)
+- Add time-aware baselines (hour-of-day/week-part segmentation)
+- Add SQLite retention TTL and vacuum/compaction controls

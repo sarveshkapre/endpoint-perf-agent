@@ -18,16 +18,22 @@
 - M5 Stabilization And Release Readiness
 
 ## Current Milestone
-- M1 Foundation
+- M2 Core Features
 
 ## Brainstorming Queue
 - Keep a broad queue of aligned candidates across features, bugs, refactor, UI/UX, docs, and test hardening.
 
 ## Pending Features
-- Keep this section updated every cycle.
+- Percentile lower-bound rules (drop detection).
+- Time-aware baselines (hour/day seasonality).
+- SQLite TTL-based retention and compaction.
+- Optional OpenTelemetry anomaly export.
 
 ## Delivered Features
-- Keep dated entries with evidence links/commands.
+- 2026-02-17: Sampling jitter (`sampling_jitter`, `collect/watch --jitter`).
+- 2026-02-17: Per-metric watch cooldown overrides (`cooldowns`, `--metric-cooldown`).
+- 2026-02-17: Percentile-threshold alert rules (`percentile_thresholds`, `--percentile-threshold`).
+- 2026-02-17: Optional SQLite sample storage and auto-read support for analyze/report.
 
 ## Risks And Blockers
 - Track blockers and mitigation plans.
