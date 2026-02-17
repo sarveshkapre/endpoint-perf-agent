@@ -54,3 +54,32 @@ func TestRunner_IgnoresTypedNilWriter(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 }
+
+func TestRunner_RejectsNegativeJitter(t *testing.T) {
+	engine, err := NewEngine(5, 3.0, nil, "critical", 0)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	r := &Runner{
+		Sampler:  &cancelingSampler{cancel: func() {}},
+		Engine:   engine,
+		Sink:     noopSink{},
+		Interval: time.Second,
+		Jitter:   -1 * time.Second,
+	}
+	if err := r.Run(context.Background()); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestNextIntervalWithJitter_Range(t *testing.T) {
+	base := 2 * time.Second
+	jitter := 500 * time.Millisecond
+	for i := 0; i < 100; i++ {
+		got := nextIntervalWithJitter(base, jitter)
+		if got < base || got > base+jitter {
+			t.Fatalf("expected duration in [%s, %s], got %s", base, base+jitter, got)
+		}
+	}
+}

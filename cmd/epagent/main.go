@@ -387,6 +387,7 @@ func runWatch(args []string) error {
 	fs.SetOutput(os.Stderr)
 	_ = fs.String("config", cfgPath, "Path to config file (JSON)")
 	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
+	jitter := fs.Duration("jitter", cfg.SamplingJitter, "Max additional random delay added per interval (e.g. 500ms)")
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
 	truncate := fs.Bool("truncate", false, "When --out is set, overwrite sample file instead of appending")
@@ -426,8 +427,12 @@ func runWatch(args []string) error {
 	if *cooldown < 0 {
 		return errors.New("cooldown must be greater than or equal to zero")
 	}
+	if *jitter < 0 {
+		return errors.New("jitter must be greater than or equal to zero")
+	}
 
 	cfg.Interval = *interval
+	cfg.SamplingJitter = *jitter
 	cfg.Duration = *duration
 	cfg.WindowSize = *window
 	cfg.ZScoreThreshold = *threshold
@@ -502,6 +507,7 @@ func runWatch(args []string) error {
 		Engine:   engine,
 		Sink:     alertSink,
 		Interval: cfg.Interval,
+		Jitter:   cfg.SamplingJitter,
 		Duration: cfg.Duration,
 		Writer:   writer,
 	}

@@ -186,6 +186,12 @@ func TestWatch_RejectsInvalidStaticThreshold(t *testing.T) {
 	}
 }
 
+func TestWatch_RejectsNegativeJitter(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--jitter", "-1ms"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestSelftest_RejectsUnknownFormat(t *testing.T) {
 	if err := runSelftest([]string{"--format", "nope"}); err == nil {
 		t.Fatalf("expected error")

@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"reflect"
 	"time"
 
@@ -24,6 +25,7 @@ type Runner struct {
 	Sink    alert.Sink
 
 	Interval time.Duration
+	Jitter   time.Duration
 	Duration time.Duration
 
 	Writer SampleWriter // optional
@@ -42,12 +44,12 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.Interval <= 0 {
 		r.Interval = 5 * time.Second
 	}
+	if r.Jitter < 0 {
+		return errors.New("jitter must be greater than or equal to zero")
+	}
 	if r.Duration < 0 {
 		r.Duration = 0
 	}
-
-	ticker := time.NewTicker(r.Interval)
-	defer ticker.Stop()
 
 	deadline := time.Time{}
 	if r.Duration > 0 {
@@ -75,10 +77,15 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
+		waitFor := nextIntervalWithJitter(r.Interval, r.Jitter)
+		timer := time.NewTimer(waitFor)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return nil
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -94,4 +101,14 @@ func isNilInterface(v any) bool {
 	default:
 		return false
 	}
+}
+
+func nextIntervalWithJitter(interval, jitter time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	if jitter <= 0 {
+		return interval
+	}
+	return interval + time.Duration(rand.Int63n(int64(jitter)+1))
 }
