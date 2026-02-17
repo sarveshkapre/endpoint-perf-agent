@@ -40,6 +40,10 @@ type AnalysisResult struct {
 }
 
 func Analyze(samples []collector.MetricSample, windowSize int, threshold float64, staticThresholds map[string]float64) AnalysisResult {
+	return AnalyzeWithPercentiles(samples, windowSize, threshold, staticThresholds, nil)
+}
+
+func AnalyzeWithPercentiles(samples []collector.MetricSample, windowSize int, threshold float64, staticThresholds map[string]float64, percentileRules map[string]anomaly.PercentileRule) AnalysisResult {
 	windowSize, threshold = NormalizeParams(windowSize, threshold)
 	result := AnalysisResult{
 		Samples:         len(samples),
@@ -115,16 +119,18 @@ func Analyze(samples []collector.MetricSample, windowSize int, threshold float64
 		}
 
 		for name, value := range metrics {
-			metricValues[name] = append(metricValues[name], value)
+			history := metricValues[name]
 			zScoreAnomaly := detector.Check(name, value)
 			staticAnomaly := anomaly.CheckStaticThreshold(name, value, staticThresholds)
-			if a := anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly); a != nil {
+			percentileAnomaly := anomaly.CheckPercentileThreshold(name, value, history, percentileRules)
+			if a := anomaly.SelectHigherSeverity(anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly), percentileAnomaly); a != nil {
 				a.Timestamp = current.Timestamp
 				a.Labels = cloneLabels(current.Labels)
 				a.TopCPUProcess = toAnomalyProcess(current.TopCPUProcess)
 				a.TopMemProcess = toAnomalyProcess(current.TopMemProcess)
 				result.Anomalies = append(result.Anomalies, *a)
 			}
+			metricValues[name] = append(metricValues[name], value)
 		}
 		prev = current
 	}
@@ -202,6 +208,16 @@ func FormatSummary(result AnalysisResult) string {
 			)
 			continue
 		}
+		if a.RuleType == anomaly.RuleTypePercentile {
+			fmt.Fprintf(&b, "- %s: %s (percentile threshold %s, %s)%s\n",
+				a.Name,
+				formatMetricValue(a.Name, a.Value),
+				formatMetricValue(a.Name, a.Threshold),
+				a.Severity,
+				formatAnomalyContextInline(a),
+			)
+			continue
+		}
 		fmt.Fprintf(&b, "- %s: %s (z=%.2f, %s)%s\n", a.Name, formatMetricValue(a.Name, a.Value), a.ZScore, a.Severity, formatAnomalyContextInline(a))
 	}
 	return b.String()
@@ -259,6 +275,17 @@ func FormatMarkdown(result AnalysisResult) string {
 	for _, a := range result.Anomalies {
 		if a.RuleType == anomaly.RuleTypeStaticThreshold {
 			fmt.Fprintf(&b, "- **%s**: value %s crossed static threshold %s (%s). %s%s\n",
+				a.Name,
+				formatMetricValue(a.Name, a.Value),
+				formatMetricValue(a.Name, a.Threshold),
+				a.Severity,
+				a.Explanation,
+				formatAnomalyContextParagraph(a),
+			)
+			continue
+		}
+		if a.RuleType == anomaly.RuleTypePercentile {
+			fmt.Fprintf(&b, "- **%s**: value %s crossed percentile threshold %s (%s). %s%s\n",
 				a.Name,
 				formatMetricValue(a.Name, a.Value),
 				formatMetricValue(a.Name, a.Threshold),

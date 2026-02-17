@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
 
@@ -303,5 +304,36 @@ func TestAnalyze_StaticThresholds(t *testing.T) {
 	md := FormatMarkdown(result)
 	if !strings.Contains(md, "crossed static threshold") {
 		t.Fatalf("expected markdown to include static threshold wording, got: %s", md)
+	}
+}
+
+func TestAnalyzeWithPercentiles(t *testing.T) {
+	t0 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	samples := make([]collector.MetricSample, 0, 12)
+	for i := 0; i < 11; i++ {
+		samples = append(samples, collector.MetricSample{
+			Timestamp:      t0.Add(time.Duration(i) * time.Second),
+			CPUPercent:     float64(10 + i),
+			MemUsedPercent: 40,
+		})
+	}
+	samples = append(samples, collector.MetricSample{
+		Timestamp:      t0.Add(11 * time.Second),
+		CPUPercent:     80,
+		MemUsedPercent: 40,
+	})
+
+	result := AnalyzeWithPercentiles(samples, 5, 100, nil, map[string]anomaly.PercentileRule{
+		"cpu_percent": {Percentile: 95, Multiplier: 1.2},
+	})
+	if len(result.Anomalies) == 0 {
+		t.Fatalf("expected percentile anomaly")
+	}
+	if result.Anomalies[0].RuleType != anomaly.RuleTypePercentile {
+		t.Fatalf("expected percentile rule type, got %q", result.Anomalies[0].RuleType)
+	}
+	md := FormatMarkdown(result)
+	if !strings.Contains(md, "crossed percentile threshold") {
+		t.Fatalf("expected markdown percentile wording, got: %s", md)
 	}
 }
