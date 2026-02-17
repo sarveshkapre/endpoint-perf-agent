@@ -3,6 +3,7 @@ package anomaly
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -16,7 +17,13 @@ type ProcessAttribution struct {
 const (
 	RuleTypeZScore          = "zscore"
 	RuleTypeStaticThreshold = "static_threshold"
+	RuleTypePercentile      = "percentile_threshold"
 )
+
+type PercentileRule struct {
+	Percentile float64
+	Multiplier float64
+}
 
 type Anomaly struct {
 	Name          string
@@ -137,6 +144,49 @@ func CheckStaticThreshold(name string, value float64, thresholds map[string]floa
 	}
 }
 
+func CheckPercentileThreshold(name string, value float64, history []float64, rules map[string]PercentileRule) *Anomaly {
+	if len(rules) == 0 {
+		return nil
+	}
+	rule, ok := rules[name]
+	if !ok {
+		return nil
+	}
+	if err := ValidatePercentileRule(rule); err != nil {
+		return nil
+	}
+	percentileValue, ok := percentile(history, rule.Percentile)
+	if !ok || percentileValue <= 0 {
+		return nil
+	}
+	threshold := percentileValue * rule.Multiplier
+	if value < threshold {
+		return nil
+	}
+	exceedRatio := (value - threshold) / threshold
+	return &Anomaly{
+		Name:        name,
+		Value:       value,
+		RuleType:    RuleTypePercentile,
+		Threshold:   threshold,
+		Mean:        percentileValue,
+		Stddev:      0,
+		ZScore:      exceedRatio,
+		Severity:    severityFromExceedRatio(exceedRatio),
+		Explanation: explainPercentileThreshold(name, value, rule.Percentile, percentileValue, rule.Multiplier, threshold, exceedRatio),
+	}
+}
+
+func ValidatePercentileRule(rule PercentileRule) error {
+	if math.IsNaN(rule.Percentile) || math.IsInf(rule.Percentile, 0) || rule.Percentile <= 0 || rule.Percentile > 100 {
+		return fmt.Errorf("percentile must be in (0,100]")
+	}
+	if math.IsNaN(rule.Multiplier) || math.IsInf(rule.Multiplier, 0) || rule.Multiplier <= 0 {
+		return fmt.Errorf("multiplier must be greater than zero")
+	}
+	return nil
+}
+
 func SelectHigherSeverity(a, b *Anomaly) *Anomaly {
 	if a == nil {
 		return b
@@ -203,6 +253,10 @@ func explainStaticThreshold(name string, value, threshold, exceedRatio float64) 
 	return fmt.Sprintf("Static threshold exceeded for %s: value %.2f is above %.2f (%.1f%% over threshold).", name, value, threshold, exceedRatio*100)
 }
 
+func explainPercentileThreshold(name string, value, percentileRank, percentileValue, multiplier, threshold, exceedRatio float64) string {
+	return fmt.Sprintf("%s exceeded dynamic percentile threshold: value %.2f is above p%.0f baseline %.2f x %.2f (threshold %.2f, %.1f%% over threshold).", name, value, percentileRank, percentileValue, multiplier, threshold, exceedRatio*100)
+}
+
 func explain(name string, value, mean, z float64) string {
 	sigma := math.Abs(z)
 	trendUp := z >= 0
@@ -253,4 +307,25 @@ func explain(name string, value, mean, z float64) string {
 	default:
 		return fmt.Sprintf("Metric %s deviated from baseline (%.1fσ).", name, sigma)
 	}
+}
+
+func percentile(values []float64, pct float64) (float64, bool) {
+	if len(values) == 0 || pct <= 0 || pct > 100 {
+		return 0, false
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+
+	if len(sorted) == 1 {
+		return sorted[0], true
+	}
+
+	rank := (pct / 100) * float64(len(sorted)-1)
+	lower := int(math.Floor(rank))
+	upper := int(math.Ceil(rank))
+	if lower == upper {
+		return sorted[lower], true
+	}
+	weight := rank - float64(lower)
+	return sorted[lower] + (sorted[upper]-sorted[lower])*weight, true
 }

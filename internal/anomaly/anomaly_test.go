@@ -66,3 +66,37 @@ func TestSelectHigherSeverityPrefersHigherSeverity(t *testing.T) {
 		t.Fatalf("expected higher severity anomaly to be selected")
 	}
 }
+
+func TestCheckPercentileThresholdFlagsExceededValue(t *testing.T) {
+	history := []float64{10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+	a := CheckPercentileThreshold("cpu_percent", 30, history, map[string]PercentileRule{
+		"cpu_percent": {Percentile: 95, Multiplier: 1.10},
+	})
+	if a == nil {
+		t.Fatalf("expected percentile-threshold anomaly")
+	}
+	if a.RuleType != RuleTypePercentile {
+		t.Fatalf("expected percentile rule type, got %q", a.RuleType)
+	}
+	if a.Threshold <= 0 {
+		t.Fatalf("expected computed threshold, got %v", a.Threshold)
+	}
+}
+
+func TestCheckPercentileThresholdSkipsWithoutHistory(t *testing.T) {
+	a := CheckPercentileThreshold("cpu_percent", 30, nil, map[string]PercentileRule{
+		"cpu_percent": {Percentile: 95, Multiplier: 1.10},
+	})
+	if a != nil {
+		t.Fatalf("expected no anomaly without history")
+	}
+}
+
+func TestValidatePercentileRuleRejectsInvalidValues(t *testing.T) {
+	if err := ValidatePercentileRule(PercentileRule{Percentile: 0, Multiplier: 1.2}); err == nil {
+		t.Fatalf("expected percentile validation error")
+	}
+	if err := ValidatePercentileRule(PercentileRule{Percentile: 95, Multiplier: 0}); err == nil {
+		t.Fatalf("expected multiplier validation error")
+	}
+}
