@@ -104,6 +104,8 @@ func runCollect(args []string) error {
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
+	storageMode := fs.String("storage", "auto", "Storage mode: auto|jsonl|sqlite")
+	maxSamples := fs.Int("max-samples", 0, "For sqlite storage, retain at most N newest samples (0 = no limit)")
 	truncate := fs.Bool("truncate", false, "Overwrite output file instead of appending")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	var labels kvLabelsFlag
@@ -145,16 +147,15 @@ func runCollect(args []string) error {
 	if cfg.SamplingJitter < 0 {
 		return errors.New("jitter must be greater than or equal to zero")
 	}
+	if *maxSamples < 0 {
+		return errors.New("max-samples must be greater than or equal to zero")
+	}
 
 	if cfg.OutputPath == "" {
 		return errors.New("output path is required")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfg.OutputPath), 0o755); err != nil {
-		return err
-	}
-
-	writer, err := storage.NewWriterWithOptions(cfg.OutputPath, !*truncate)
+	writer, err := buildSampleWriter(cfg.OutputPath, *storageMode, *truncate, *maxSamples)
 	if err != nil {
 		return err
 	}
@@ -397,6 +398,8 @@ func runWatch(args []string) error {
 	jitter := fs.Duration("jitter", cfg.SamplingJitter, "Max additional random delay added per interval (e.g. 500ms)")
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	out := fs.String("out", "", "Optional JSONL path to also write samples (empty = don't write)")
+	storageMode := fs.String("storage", "auto", "When --out is set, storage mode: auto|jsonl|sqlite")
+	maxSamples := fs.Int("max-samples", 0, "When using sqlite storage, retain at most N newest samples (0 = no limit)")
 	truncate := fs.Bool("truncate", false, "When --out is set, overwrite sample file instead of appending")
 	hostID := fs.String("host-id", "", "Override host ID (defaults to config host_id)")
 	var labels kvLabelsFlag
@@ -441,6 +444,9 @@ func runWatch(args []string) error {
 	if *jitter < 0 {
 		return errors.New("jitter must be greater than or equal to zero")
 	}
+	if *maxSamples < 0 {
+		return errors.New("max-samples must be greater than or equal to zero")
+	}
 
 	cfg.Interval = *interval
 	cfg.SamplingJitter = *jitter
@@ -481,10 +487,7 @@ func runWatch(args []string) error {
 	var writer watch.SampleWriter
 	var writerCloser interface{ Close() error }
 	if *out != "" {
-		if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
-			return err
-		}
-		w, err := storage.NewWriterWithOptions(*out, !*truncate)
+		w, err := buildSampleWriter(*out, *storageMode, *truncate, *maxSamples)
 		if err != nil {
 			return err
 		}
@@ -806,6 +809,55 @@ func nextIntervalWithJitter(interval, jitter time.Duration) time.Duration {
 		return interval
 	}
 	return interval + time.Duration(rand.Int63n(int64(jitter)+1))
+}
+
+type sampleWriteCloser interface {
+	Write(sample collector.MetricSample) error
+	Close() error
+}
+
+func buildSampleWriter(path, mode string, truncate bool, maxSamples int) (sampleWriteCloser, error) {
+	resolved, err := resolveStorageMode(mode, path)
+	if err != nil {
+		return nil, err
+	}
+	switch resolved {
+	case "jsonl":
+		if maxSamples > 0 {
+			return nil, errors.New("max-samples is only supported with sqlite storage")
+		}
+		if path != "-" {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return nil, err
+			}
+		}
+		return storage.NewWriterWithOptions(path, !truncate)
+	case "sqlite":
+		if path == "-" {
+			return nil, errors.New("sqlite storage requires a filesystem path, not stdout")
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+		return storage.NewSQLiteWriter(path, maxSamples, truncate)
+	default:
+		return nil, fmt.Errorf("unknown storage mode: %s (expected auto|jsonl|sqlite)", mode)
+	}
+}
+
+func resolveStorageMode(mode, path string) (string, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "", "auto":
+		if storage.IsSQLitePath(path) {
+			return "sqlite", nil
+		}
+		return "jsonl", nil
+	case "jsonl", "sqlite":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("unknown storage mode: %s (expected auto|jsonl|sqlite)", mode)
+	}
 }
 
 func parseRFC3339TimeFlag(name, value string) (time.Time, error) {

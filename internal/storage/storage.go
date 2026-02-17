@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
@@ -63,6 +65,9 @@ func (w *Writer) Close() error {
 }
 
 func ReadSamples(path string) ([]collector.MetricSample, error) {
+	if IsSQLitePath(path) {
+		return ReadSamplesFromSQLite(path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -89,4 +94,9 @@ func ReadSamples(path string) ([]collector.MetricSample, error) {
 		return nil, err
 	}
 	return samples, nil
+}
+
+func IsSQLitePath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".db" || ext == ".sqlite" || ext == ".sqlite3"
 }

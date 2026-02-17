@@ -78,3 +78,36 @@ func (w *SQLiteWriter) Close() error {
 	}
 	return w.db.Close()
 }
+
+func ReadSamplesFromSQLite(path string) ([]collector.MetricSample, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT payload FROM samples ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	samples := make([]collector.MetricSample, 0)
+	rowNum := 0
+	for rows.Next() {
+		rowNum++
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var sample collector.MetricSample
+		if err := json.Unmarshal([]byte(payload), &sample); err != nil {
+			return nil, fmt.Errorf("invalid sqlite sample payload at row %d: %w", rowNum, err)
+		}
+		samples = append(samples, sample)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return samples, nil
+}

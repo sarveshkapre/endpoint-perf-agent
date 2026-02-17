@@ -29,7 +29,7 @@ func (noopSink) Emit(_ context.Context, _ alert.Alert) error { return nil }
 func (noopSink) Close() error                                { return nil }
 
 func TestRunner_IgnoresTypedNilWriter(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "critical", 0, nil)
+	engine, err := NewEngine(5, 3.0, nil, "critical", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestRunner_IgnoresTypedNilWriter(t *testing.T) {
 }
 
 func TestRunner_RejectsNegativeJitter(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "critical", 0, nil)
+	engine, err := NewEngine(5, 3.0, nil, "critical", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}

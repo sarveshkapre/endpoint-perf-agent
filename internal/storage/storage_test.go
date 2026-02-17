@@ -203,3 +203,39 @@ func TestSQLiteWriter_RejectsNegativeMaxSamples(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestReadSamples_ReadsSQLitePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "samples.sqlite")
+	w, err := NewSQLiteWriter(path, 0, false)
+	if err != nil {
+		t.Fatalf("NewSQLiteWriter: %v", err)
+	}
+	base := time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)
+	if err := w.Write(collector.MetricSample{Timestamp: base, HostID: "host-a", CPUPercent: 11}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Write(collector.MetricSample{Timestamp: base.Add(time.Second), HostID: "host-b", CPUPercent: 12}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_ = w.Close()
+
+	samples, err := ReadSamples(path)
+	if err != nil {
+		t.Fatalf("ReadSamples: %v", err)
+	}
+	if len(samples) != 2 {
+		t.Fatalf("expected 2 samples, got %d", len(samples))
+	}
+	if samples[0].HostID != "host-a" || samples[1].HostID != "host-b" {
+		t.Fatalf("unexpected sqlite sample order: %+v", samples)
+	}
+}
+
+func TestIsSQLitePath(t *testing.T) {
+	if !IsSQLitePath("a.db") || !IsSQLitePath("a.sqlite") || !IsSQLitePath("a.sqlite3") {
+		t.Fatalf("expected sqlite extensions to be detected")
+	}
+	if IsSQLitePath("a.jsonl") {
+		t.Fatalf("did not expect jsonl extension to be detected as sqlite")
+	}
+}

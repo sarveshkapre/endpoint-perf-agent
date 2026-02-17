@@ -184,6 +184,12 @@ func TestWatch_RejectsNegativeDuration(t *testing.T) {
 	}
 }
 
+func TestWatch_RejectsNegativeMaxSamples(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--max-samples", "-1"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestWatch_RejectsUnknownMetrics(t *testing.T) {
 	if err := runWatch([]string{"--duration", "1s", "--metrics", "nope"}); err == nil {
 		t.Fatalf("expected error")
@@ -228,6 +234,12 @@ func TestSelftest_RejectsUnknownFormat(t *testing.T) {
 
 func TestSelftest_RejectsUnknownMetrics(t *testing.T) {
 	if err := runSelftest([]string{"--metrics", "nope"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestCollect_RejectsNegativeMaxSamples(t *testing.T) {
+	if err := runCollect([]string{"--once", "--max-samples", "-1"}); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -290,6 +302,23 @@ func TestPercentileThresholdsFlag_ParseAndMerge(t *testing.T) {
 	}
 	if _, ok := merged["mem_used_percent"]; !ok {
 		t.Fatalf("expected mem percentile rule in merge: %+v", merged)
+	}
+}
+
+func TestResolveStorageMode_Auto(t *testing.T) {
+	mode, err := resolveStorageMode("auto", "samples.db")
+	if err != nil || mode != "sqlite" {
+		t.Fatalf("expected sqlite mode, got mode=%q err=%v", mode, err)
+	}
+	mode, err = resolveStorageMode("auto", "samples.jsonl")
+	if err != nil || mode != "jsonl" {
+		t.Fatalf("expected jsonl mode, got mode=%q err=%v", mode, err)
+	}
+}
+
+func TestBuildSampleWriter_RejectsMaxSamplesWithJSONL(t *testing.T) {
+	if _, err := buildSampleWriter(filepath.Join(t.TempDir(), "samples.jsonl"), "jsonl", false, 1); err == nil {
+		t.Fatalf("expected error")
 	}
 }
 
