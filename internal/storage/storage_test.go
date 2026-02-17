@@ -2,12 +2,15 @@ package storage
 
 import (
 	"bytes"
+	"database/sql"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
+	_ "modernc.org/sqlite"
 )
 
 func TestReadSamplesSkipsBlankLines(t *testing.T) {
@@ -119,5 +122,84 @@ func TestNewWriterWithOptions_TruncateOverwrites(t *testing.T) {
 	}
 	if !bytes.Contains(after, []byte(`"host_id":"b"`)) {
 		t.Fatalf("expected new contents, got: %s", string(after))
+	}
+}
+
+func TestSQLiteWriter_RetentionMaxSamples(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "samples.db")
+	w, err := NewSQLiteWriter(path, 2, false)
+	if err != nil {
+		t.Fatalf("NewSQLiteWriter: %v", err)
+	}
+
+	base := time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		if err := w.Write(collector.MetricSample{
+			Timestamp:      base.Add(time.Duration(i) * time.Second),
+			HostID:         string(rune('a' + i)),
+			CPUPercent:     float64(10 + i),
+			MemUsedPercent: 20,
+		}); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM samples`).Scan(&count); err != nil {
+		t.Fatalf("QueryRow count: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected retained row count 2, got %d", count)
+	}
+}
+
+func TestSQLiteWriter_Truncate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "samples.db")
+
+	w1, err := NewSQLiteWriter(path, 0, false)
+	if err != nil {
+		t.Fatalf("NewSQLiteWriter: %v", err)
+	}
+	if err := w1.Write(collector.MetricSample{Timestamp: time.Now().UTC(), HostID: "first", CPUPercent: 1}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_ = w1.Close()
+
+	w2, err := NewSQLiteWriter(path, 0, true)
+	if err != nil {
+		t.Fatalf("NewSQLiteWriter truncate: %v", err)
+	}
+	if err := w2.Write(collector.MetricSample{Timestamp: time.Now().UTC(), HostID: "second", CPUPercent: 2}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_ = w2.Close()
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM samples`).Scan(&count); err != nil {
+		t.Fatalf("QueryRow count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected row count 1 after truncate, got %d", count)
+	}
+}
+
+func TestSQLiteWriter_RejectsNegativeMaxSamples(t *testing.T) {
+	if _, err := NewSQLiteWriter(filepath.Join(t.TempDir(), "samples.db"), -1, false); err == nil {
+		t.Fatalf("expected error")
 	}
 }
