@@ -401,6 +401,8 @@ func runWatch(args []string) error {
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	redactMode := fs.String("redact", "", "Redact sensitive fields in alerts: omit|hash (empty = no redaction)")
 	cooldown := fs.Duration("cooldown", 30*time.Second, "Per-metric alert cooldown (0 = no dedupe)")
+	var cooldownOverrides metricCooldownsFlag
+	fs.Var(&cooldownOverrides, "metric-cooldown", "Per-metric cooldown override (repeatable): metric=duration (e.g. cpu=5s)")
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	var staticThresholds staticThresholdsFlag
 	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
@@ -454,6 +456,10 @@ func runWatch(args []string) error {
 	if staticThresholds.Any() {
 		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
 	}
+	mergedCooldownOverrides := cfg.CooldownOverrides
+	if cooldownOverrides.Any() {
+		mergedCooldownOverrides = mergeCooldownOverrides(cfg.CooldownOverrides, cooldownOverrides.Values())
+	}
 
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be greater than zero")
@@ -476,7 +482,7 @@ func runWatch(args []string) error {
 
 	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
-	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown, nil)
+	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown, mergedCooldownOverrides)
 	if err != nil {
 		return err
 	}
@@ -957,6 +963,82 @@ func mergeStaticThresholds(base, extra map[string]float64) map[string]float64 {
 		return nil
 	}
 	out := make(map[string]float64, len(base)+len(extra))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type metricCooldownsFlag struct {
+	m map[string]time.Duration
+}
+
+func (f *metricCooldownsFlag) String() string {
+	if len(f.m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(f.m))
+	for k, v := range f.m {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *metricCooldownsFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	name, rawDuration, ok := strings.Cut(value, "=")
+	if !ok {
+		return fmt.Errorf("metric-cooldown must be in metric=duration form: %q", value)
+	}
+	name = strings.TrimSpace(name)
+	rawDuration = strings.TrimSpace(rawDuration)
+	if name == "" || rawDuration == "" {
+		return fmt.Errorf("metric-cooldown must be in metric=duration form: %q", value)
+	}
+	parsed, err := time.ParseDuration(rawDuration)
+	if err != nil {
+		return fmt.Errorf("invalid cooldown duration for %s: %w", name, err)
+	}
+	normalized, err := config.ParseCooldownOverrides(map[string]time.Duration{name: parsed})
+	if err != nil {
+		return err
+	}
+	if f.m == nil {
+		f.m = make(map[string]time.Duration)
+	}
+	for k, v := range normalized {
+		f.m[k] = v
+	}
+	return nil
+}
+
+func (f *metricCooldownsFlag) Any() bool { return len(f.m) > 0 }
+
+func (f *metricCooldownsFlag) Values() map[string]time.Duration {
+	if len(f.m) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Duration, len(f.m))
+	for k, v := range f.m {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeCooldownOverrides(base, extra map[string]time.Duration) map[string]time.Duration {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Duration, len(base)+len(extra))
 	for k, v := range base {
 		out[k] = v
 	}

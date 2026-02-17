@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseMetricFamilies(t *testing.T) {
@@ -131,5 +132,48 @@ func TestLoadRespectsSamplingJitter(t *testing.T) {
 	}
 	if got, want := cfg.SamplingJitter.String(), "750ms"; got != want {
 		t.Fatalf("expected sampling jitter %q, got %q", want, got)
+	}
+}
+
+func TestParseCooldownOverridesNormalizesAliases(t *testing.T) {
+	cooldowns, err := ParseCooldownOverrides(map[string]time.Duration{
+		"cpu":       5 * time.Second,
+		"disk_read": 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("ParseCooldownOverrides: %v", err)
+	}
+	if got := cooldowns["cpu_percent"]; got != 5*time.Second {
+		t.Fatalf("expected cpu_percent cooldown, got %+v", cooldowns)
+	}
+	if got := cooldowns["disk_read_bytes_per_sec"]; got != 10*time.Second {
+		t.Fatalf("expected disk_read_bytes_per_sec cooldown, got %+v", cooldowns)
+	}
+}
+
+func TestParseCooldownOverridesRejectsUnknownMetric(t *testing.T) {
+	_, err := ParseCooldownOverrides(map[string]time.Duration{"nope": time.Second})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestLoadRespectsCooldownOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfg.json")
+	payload := `{"cooldowns":{"cpu":"5s","net_rx_bytes_per_sec":"2s"}}`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.CooldownOverrides["cpu_percent"]; got != 5*time.Second {
+		t.Fatalf("expected cpu_percent cooldown 5s, got %+v", cfg.CooldownOverrides)
+	}
+	if got := cfg.CooldownOverrides["net_rx_bytes_per_sec"]; got != 2*time.Second {
+		t.Fatalf("expected net_rx_bytes_per_sec cooldown 2s, got %+v", cfg.CooldownOverrides)
 	}
 }

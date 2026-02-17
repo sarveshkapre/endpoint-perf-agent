@@ -33,31 +33,33 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval           time.Duration      `json:"-"`
-	SamplingJitter     time.Duration      `json:"-"`
-	Duration           time.Duration      `json:"-"`
-	WindowSize         int                `json:"window_size"`
-	ZScoreThreshold    float64            `json:"zscore_threshold"`
-	StaticThresholds   map[string]float64 `json:"-"`
-	OutputPath         string             `json:"output_path"`
-	HostID             string             `json:"host_id"`
-	Labels             map[string]string  `json:"-"`
-	ProcessAttribution bool               `json:"process_attribution"`
-	Metrics            MetricFamilies     `json:"-"`
+	Interval           time.Duration            `json:"-"`
+	SamplingJitter     time.Duration            `json:"-"`
+	Duration           time.Duration            `json:"-"`
+	WindowSize         int                      `json:"window_size"`
+	ZScoreThreshold    float64                  `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64       `json:"-"`
+	CooldownOverrides  map[string]time.Duration `json:"-"`
+	OutputPath         string                   `json:"output_path"`
+	HostID             string                   `json:"host_id"`
+	Labels             map[string]string        `json:"-"`
+	ProcessAttribution bool                     `json:"process_attribution"`
+	Metrics            MetricFamilies           `json:"-"`
 }
 
 type fileConfig struct {
-	Interval           Duration           `json:"interval"`
-	SamplingJitter     Duration           `json:"sampling_jitter"`
-	Duration           Duration           `json:"duration"`
-	WindowSize         int                `json:"window_size"`
-	ZScoreThreshold    float64            `json:"zscore_threshold"`
-	StaticThresholds   map[string]float64 `json:"static_thresholds"`
-	OutputPath         string             `json:"output_path"`
-	HostID             string             `json:"host_id"`
-	Labels             map[string]string  `json:"labels"`
-	ProcessAttribution *bool              `json:"process_attribution"`
-	EnabledMetrics     *[]string          `json:"enabled_metrics"`
+	Interval           Duration            `json:"interval"`
+	SamplingJitter     Duration            `json:"sampling_jitter"`
+	Duration           Duration            `json:"duration"`
+	WindowSize         int                 `json:"window_size"`
+	ZScoreThreshold    float64             `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64  `json:"static_thresholds"`
+	Cooldowns          map[string]Duration `json:"cooldowns"`
+	OutputPath         string              `json:"output_path"`
+	HostID             string              `json:"host_id"`
+	Labels             map[string]string   `json:"labels"`
+	ProcessAttribution *bool               `json:"process_attribution"`
+	EnabledMetrics     *[]string           `json:"enabled_metrics"`
 }
 
 type MetricFamilies struct {
@@ -121,6 +123,17 @@ func Load(path string) (Config, error) {
 			return cfg, err
 		}
 		cfg.StaticThresholds = thresholds
+	}
+	if fc.Cooldowns != nil {
+		parsedCooldowns := make(map[string]time.Duration, len(fc.Cooldowns))
+		for metric, d := range fc.Cooldowns {
+			parsedCooldowns[metric] = d.Duration
+		}
+		overrides, err := ParseCooldownOverrides(parsedCooldowns)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.CooldownOverrides = overrides
 	}
 	if fc.OutputPath != "" {
 		cfg.OutputPath = fc.OutputPath
@@ -243,4 +256,30 @@ func normalizeStaticThresholdMetricName(s string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func ParseCooldownOverrides(in map[string]time.Duration) (map[string]time.Duration, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]time.Duration, len(in))
+	for rawName, cooldown := range in {
+		name, ok := normalizeStaticThresholdMetricName(rawName)
+		if !ok {
+			return nil, &CooldownMetricError{Name: rawName}
+		}
+		if cooldown < 0 {
+			return nil, fmt.Errorf("cooldown for %s must be greater than or equal to zero", name)
+		}
+		out[name] = cooldown
+	}
+	return out, nil
+}
+
+type CooldownMetricError struct {
+	Name string
+}
+
+func (e *CooldownMetricError) Error() string {
+	return "unknown cooldown metric: " + e.Name + " (expected cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)"
 }

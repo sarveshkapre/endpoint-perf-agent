@@ -192,6 +192,12 @@ func TestWatch_RejectsNegativeJitter(t *testing.T) {
 	}
 }
 
+func TestWatch_RejectsUnknownMetricCooldownMetric(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--metric-cooldown", "nope=1s"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
 func TestSelftest_RejectsUnknownFormat(t *testing.T) {
 	if err := runSelftest([]string{"--format", "nope"}); err == nil {
 		t.Fatalf("expected error")
@@ -219,6 +225,27 @@ func TestKVLabelsFlag_ParseAndMerge(t *testing.T) {
 	merged := mergeLabels(map[string]string{"region": "us-east-1"}, f.m)
 	if merged["region"] != "us-east-1" || merged["env"] != "test" || merged["service"] != "api" {
 		t.Fatalf("unexpected merged labels: %+v", merged)
+	}
+}
+
+func TestMetricCooldownsFlag_ParseAndMerge(t *testing.T) {
+	var f metricCooldownsFlag
+	if err := f.Set("cpu=5s"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := f.Set("disk_read=10s"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := f.m["cpu_percent"]; got != 5*time.Second {
+		t.Fatalf("unexpected cpu cooldown: %+v", f.m)
+	}
+	if got := f.m["disk_read_bytes_per_sec"]; got != 10*time.Second {
+		t.Fatalf("unexpected disk_read cooldown: %+v", f.m)
+	}
+
+	merged := mergeCooldownOverrides(map[string]time.Duration{"mem_used_percent": 3 * time.Second}, f.m)
+	if merged["mem_used_percent"] != 3*time.Second || merged["cpu_percent"] != 5*time.Second {
+		t.Fatalf("unexpected merged cooldowns: %+v", merged)
 	}
 }
 
