@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/alert"
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/config"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/redact"
@@ -218,6 +219,8 @@ func runAnalyze(args []string) error {
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
 	var staticThresholds staticThresholdsFlag
 	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
+	var percentileThresholds percentileThresholdsFlag
+	fs.Var(&percentileThresholds, "percentile-threshold", "Dynamic percentile rule (repeatable): metric=percentile,multiplier (e.g. cpu=95,1.2)")
 	sink := fs.String("sink", "stdout", "Alert sink for --format ndjson: stdout|syslog")
 	syslogTag := fs.String("syslog-tag", "epagent", "Syslog tag (when --sink syslog)")
 	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
@@ -300,7 +303,11 @@ func runAnalyze(args []string) error {
 	if staticThresholds.Any() {
 		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
 	}
-	result := report.Analyze(samples, windowSize, zScoreThreshold, mergedStaticThresholds)
+	mergedPercentileRules := cfg.PercentileRules
+	if percentileThresholds.Any() {
+		mergedPercentileRules = mergePercentileRules(cfg.PercentileRules, percentileThresholds.Values())
+	}
+	result := report.AnalyzeWithPercentiles(samples, windowSize, zScoreThreshold, mergedStaticThresholds, mergedPercentileRules)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
@@ -406,6 +413,8 @@ func runWatch(args []string) error {
 	metrics := fs.String("metrics", "", "Comma-separated metric families to enable: cpu,mem,disk,net (empty = config/defaults)")
 	var staticThresholds staticThresholdsFlag
 	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
+	var percentileThresholds percentileThresholdsFlag
+	fs.Var(&percentileThresholds, "percentile-threshold", "Dynamic percentile rule (repeatable): metric=percentile,multiplier (e.g. cpu=95,1.2)")
 	processAttribution := fs.Bool("process-attribution", cfg.ProcessAttribution, "Capture per-sample top CPU/memory process attribution (can be expensive)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -460,6 +469,10 @@ func runWatch(args []string) error {
 	if cooldownOverrides.Any() {
 		mergedCooldownOverrides = mergeCooldownOverrides(cfg.CooldownOverrides, cooldownOverrides.Values())
 	}
+	mergedPercentileRules := cfg.PercentileRules
+	if percentileThresholds.Any() {
+		mergedPercentileRules = mergePercentileRules(cfg.PercentileRules, percentileThresholds.Values())
+	}
 
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be greater than zero")
@@ -482,7 +495,7 @@ func runWatch(args []string) error {
 
 	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
-	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown, mergedCooldownOverrides)
+	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown, mergedCooldownOverrides, mergedPercentileRules)
 	if err != nil {
 		return err
 	}
@@ -566,6 +579,8 @@ func runReport(args []string) error {
 	fs.Var(&metricFamilies, "metric", "Include only these metric families in output (repeatable): cpu|mem|disk|net")
 	var staticThresholds staticThresholdsFlag
 	fs.Var(&staticThresholds, "static-threshold", "Static upper threshold rule (repeatable): metric=value (metric: cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)")
+	var percentileThresholds percentileThresholdsFlag
+	fs.Var(&percentileThresholds, "percentile-threshold", "Dynamic percentile rule (repeatable): metric=percentile,multiplier (e.g. cpu=95,1.2)")
 	redactMode := fs.String("redact", "", "Redact sensitive fields in output: omit|hash (empty = no redaction)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -646,7 +661,11 @@ func runReport(args []string) error {
 	if staticThresholds.Any() {
 		mergedStaticThresholds = mergeStaticThresholds(cfg.StaticThresholds, staticThresholds.Values())
 	}
-	result := report.Analyze(samples, windowSize, zScoreThreshold, mergedStaticThresholds)
+	mergedPercentileRules := cfg.PercentileRules
+	if percentileThresholds.Any() {
+		mergedPercentileRules = mergePercentileRules(cfg.PercentileRules, percentileThresholds.Values())
+	}
+	result := report.AnalyzeWithPercentiles(samples, windowSize, zScoreThreshold, mergedStaticThresholds, mergedPercentileRules)
 	result, err = report.ApplyFilters(result, *minSeverity, *top)
 	if err != nil {
 		return err
@@ -1039,6 +1058,95 @@ func mergeCooldownOverrides(base, extra map[string]time.Duration) map[string]tim
 		return nil
 	}
 	out := make(map[string]time.Duration, len(base)+len(extra))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type percentileThresholdsFlag struct {
+	m map[string]anomaly.PercentileRule
+}
+
+func (f *percentileThresholdsFlag) String() string {
+	if len(f.m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(f.m))
+	for k, v := range f.m {
+		parts = append(parts, fmt.Sprintf("%s=%.2f,%.2f", k, v.Percentile, v.Multiplier))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *percentileThresholdsFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	name, rawRule, ok := strings.Cut(value, "=")
+	if !ok {
+		return fmt.Errorf("percentile-threshold must be in metric=percentile,multiplier form: %q", value)
+	}
+	name = strings.TrimSpace(name)
+	rawRule = strings.TrimSpace(rawRule)
+	if name == "" || rawRule == "" {
+		return fmt.Errorf("percentile-threshold must be in metric=percentile,multiplier form: %q", value)
+	}
+	parts := strings.Split(rawRule, ",")
+	if len(parts) != 2 {
+		return fmt.Errorf("percentile-threshold must be in metric=percentile,multiplier form: %q", value)
+	}
+	percentile, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	if err != nil {
+		return fmt.Errorf("invalid percentile for %s: %w", name, err)
+	}
+	multiplier, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	if err != nil {
+		return fmt.Errorf("invalid multiplier for %s: %w", name, err)
+	}
+	normalized, err := config.ParsePercentileRules(map[string]anomaly.PercentileRule{
+		name: {
+			Percentile: percentile,
+			Multiplier: multiplier,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if f.m == nil {
+		f.m = make(map[string]anomaly.PercentileRule)
+	}
+	for k, v := range normalized {
+		f.m[k] = v
+	}
+	return nil
+}
+
+func (f *percentileThresholdsFlag) Any() bool { return len(f.m) > 0 }
+
+func (f *percentileThresholdsFlag) Values() map[string]anomaly.PercentileRule {
+	if len(f.m) == 0 {
+		return nil
+	}
+	out := make(map[string]anomaly.PercentileRule, len(f.m))
+	for k, v := range f.m {
+		out[k] = v
+	}
+	return out
+}
+
+func mergePercentileRules(base, extra map[string]anomaly.PercentileRule) map[string]anomaly.PercentileRule {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]anomaly.PercentileRule, len(base)+len(extra))
 	for k, v := range base {
 		out[k] = v
 	}

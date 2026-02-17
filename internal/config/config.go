@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 )
 
 type Duration struct {
@@ -33,33 +35,40 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
-	Interval           time.Duration            `json:"-"`
-	SamplingJitter     time.Duration            `json:"-"`
-	Duration           time.Duration            `json:"-"`
-	WindowSize         int                      `json:"window_size"`
-	ZScoreThreshold    float64                  `json:"zscore_threshold"`
-	StaticThresholds   map[string]float64       `json:"-"`
-	CooldownOverrides  map[string]time.Duration `json:"-"`
-	OutputPath         string                   `json:"output_path"`
-	HostID             string                   `json:"host_id"`
-	Labels             map[string]string        `json:"-"`
-	ProcessAttribution bool                     `json:"process_attribution"`
-	Metrics            MetricFamilies           `json:"-"`
+	Interval           time.Duration                     `json:"-"`
+	SamplingJitter     time.Duration                     `json:"-"`
+	Duration           time.Duration                     `json:"-"`
+	WindowSize         int                               `json:"window_size"`
+	ZScoreThreshold    float64                           `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64                `json:"-"`
+	CooldownOverrides  map[string]time.Duration          `json:"-"`
+	PercentileRules    map[string]anomaly.PercentileRule `json:"-"`
+	OutputPath         string                            `json:"output_path"`
+	HostID             string                            `json:"host_id"`
+	Labels             map[string]string                 `json:"-"`
+	ProcessAttribution bool                              `json:"process_attribution"`
+	Metrics            MetricFamilies                    `json:"-"`
 }
 
 type fileConfig struct {
-	Interval           Duration            `json:"interval"`
-	SamplingJitter     Duration            `json:"sampling_jitter"`
-	Duration           Duration            `json:"duration"`
-	WindowSize         int                 `json:"window_size"`
-	ZScoreThreshold    float64             `json:"zscore_threshold"`
-	StaticThresholds   map[string]float64  `json:"static_thresholds"`
-	Cooldowns          map[string]Duration `json:"cooldowns"`
-	OutputPath         string              `json:"output_path"`
-	HostID             string              `json:"host_id"`
-	Labels             map[string]string   `json:"labels"`
-	ProcessAttribution *bool               `json:"process_attribution"`
-	EnabledMetrics     *[]string           `json:"enabled_metrics"`
+	Interval           Duration                  `json:"interval"`
+	SamplingJitter     Duration                  `json:"sampling_jitter"`
+	Duration           Duration                  `json:"duration"`
+	WindowSize         int                       `json:"window_size"`
+	ZScoreThreshold    float64                   `json:"zscore_threshold"`
+	StaticThresholds   map[string]float64        `json:"static_thresholds"`
+	Cooldowns          map[string]Duration       `json:"cooldowns"`
+	PercentileRules    map[string]percentileRule `json:"percentile_thresholds"`
+	OutputPath         string                    `json:"output_path"`
+	HostID             string                    `json:"host_id"`
+	Labels             map[string]string         `json:"labels"`
+	ProcessAttribution *bool                     `json:"process_attribution"`
+	EnabledMetrics     *[]string                 `json:"enabled_metrics"`
+}
+
+type percentileRule struct {
+	Percentile float64 `json:"percentile"`
+	Multiplier float64 `json:"multiplier"`
 }
 
 type MetricFamilies struct {
@@ -134,6 +143,20 @@ func Load(path string) (Config, error) {
 			return cfg, err
 		}
 		cfg.CooldownOverrides = overrides
+	}
+	if fc.PercentileRules != nil {
+		parsedRules := make(map[string]anomaly.PercentileRule, len(fc.PercentileRules))
+		for metric, rule := range fc.PercentileRules {
+			parsedRules[metric] = anomaly.PercentileRule{
+				Percentile: rule.Percentile,
+				Multiplier: rule.Multiplier,
+			}
+		}
+		normalizedRules, err := ParsePercentileRules(parsedRules)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.PercentileRules = normalizedRules
 	}
 	if fc.OutputPath != "" {
 		cfg.OutputPath = fc.OutputPath
@@ -282,4 +305,30 @@ type CooldownMetricError struct {
 
 func (e *CooldownMetricError) Error() string {
 	return "unknown cooldown metric: " + e.Name + " (expected cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)"
+}
+
+func ParsePercentileRules(in map[string]anomaly.PercentileRule) (map[string]anomaly.PercentileRule, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]anomaly.PercentileRule, len(in))
+	for rawName, rule := range in {
+		name, ok := normalizeStaticThresholdMetricName(rawName)
+		if !ok {
+			return nil, &PercentileMetricError{Name: rawName}
+		}
+		if err := anomaly.ValidatePercentileRule(rule); err != nil {
+			return nil, fmt.Errorf("invalid percentile rule for %s: %w", name, err)
+		}
+		out[name] = rule
+	}
+	return out, nil
+}
+
+type PercentileMetricError struct {
+	Name string
+}
+
+func (e *PercentileMetricError) Error() string {
+	return "unknown percentile metric: " + e.Name + " (expected cpu_percent|mem_used_percent|disk_used_percent|disk_read_bytes_per_sec|disk_write_bytes_per_sec|net_rx_bytes_per_sec|net_tx_bytes_per_sec)"
 }

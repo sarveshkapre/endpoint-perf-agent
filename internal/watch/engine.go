@@ -14,6 +14,7 @@ import (
 type Engine struct {
 	detector         *anomaly.Detector
 	staticThresholds map[string]float64
+	percentileRules  map[string]anomaly.PercentileRule
 	minRank          int
 	cooldown         time.Duration
 	cooldownByMetric map[string]time.Duration
@@ -23,7 +24,7 @@ type Engine struct {
 	threshold        float64
 }
 
-func NewEngine(windowSize int, threshold float64, staticThresholds map[string]float64, minSeverity string, cooldown time.Duration, cooldownByMetric map[string]time.Duration) (*Engine, error) {
+func NewEngine(windowSize int, threshold float64, staticThresholds map[string]float64, minSeverity string, cooldown time.Duration, cooldownByMetric map[string]time.Duration, percentileRules map[string]anomaly.PercentileRule) (*Engine, error) {
 	windowSize, threshold = report.NormalizeParams(windowSize, threshold)
 
 	if minSeverity == "" {
@@ -42,10 +43,16 @@ func NewEngine(windowSize int, threshold float64, staticThresholds map[string]fl
 			return nil, fmt.Errorf("cooldown override for %s must be greater than or equal to zero", metric)
 		}
 	}
+	for metric, rule := range percentileRules {
+		if err := anomaly.ValidatePercentileRule(rule); err != nil {
+			return nil, fmt.Errorf("invalid percentile rule for %s: %w", metric, err)
+		}
+	}
 
 	return &Engine{
 		detector:         anomaly.NewDetector(windowSize, threshold),
 		staticThresholds: cloneThresholds(staticThresholds),
+		percentileRules:  clonePercentileRules(percentileRules),
 		minRank:          minRank,
 		cooldown:         cooldown,
 		cooldownByMetric: cloneCooldowns(cooldownByMetric),
@@ -113,9 +120,11 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 
 	alerts := make([]alert.Alert, 0)
 	for name, value := range metrics {
+		history := e.detector.History(name)
 		zScoreAnomaly := e.detector.Check(name, value)
 		staticAnomaly := anomaly.CheckStaticThreshold(name, value, e.staticThresholds)
-		a := anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly)
+		percentileAnomaly := anomaly.CheckPercentileThreshold(name, value, history, e.percentileRules)
+		a := anomaly.SelectHigherSeverity(anomaly.SelectHigherSeverity(zScoreAnomaly, staticAnomaly), percentileAnomaly)
 		if a == nil {
 			continue
 		}
@@ -208,4 +217,21 @@ func (e *Engine) cooldownForMetric(metric string) time.Duration {
 		return d
 	}
 	return e.cooldown
+}
+
+func clonePercentileRules(in map[string]anomaly.PercentileRule) map[string]anomaly.PercentileRule {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]anomaly.PercentileRule, len(in))
+	for k, v := range in {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

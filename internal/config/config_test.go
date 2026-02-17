@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 )
 
 func TestParseMetricFamilies(t *testing.T) {
@@ -175,5 +177,54 @@ func TestLoadRespectsCooldownOverrides(t *testing.T) {
 	}
 	if got := cfg.CooldownOverrides["net_rx_bytes_per_sec"]; got != 2*time.Second {
 		t.Fatalf("expected net_rx_bytes_per_sec cooldown 2s, got %+v", cfg.CooldownOverrides)
+	}
+}
+
+func TestParsePercentileRulesNormalizesAliases(t *testing.T) {
+	rules, err := ParsePercentileRules(map[string]anomaly.PercentileRule{
+		"cpu": {
+			Percentile: 95,
+			Multiplier: 1.2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParsePercentileRules: %v", err)
+	}
+	rule, ok := rules["cpu_percent"]
+	if !ok {
+		t.Fatalf("expected cpu_percent rule, got %+v", rules)
+	}
+	if rule.Percentile != 95 || rule.Multiplier != 1.2 {
+		t.Fatalf("unexpected rule values: %+v", rule)
+	}
+}
+
+func TestParsePercentileRulesRejectsUnknownMetric(t *testing.T) {
+	_, err := ParsePercentileRules(map[string]anomaly.PercentileRule{
+		"nope": {Percentile: 95, Multiplier: 1.2},
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestLoadRespectsPercentileRules(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfg.json")
+	payload := `{"percentile_thresholds":{"cpu":{"percentile":95,"multiplier":1.2}}}`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	rule, ok := cfg.PercentileRules["cpu_percent"]
+	if !ok {
+		t.Fatalf("expected cpu_percent percentile rule, got %+v", cfg.PercentileRules)
+	}
+	if rule.Percentile != 95 || rule.Multiplier != 1.2 {
+		t.Fatalf("unexpected percentile rule: %+v", rule)
 	}
 }

@@ -4,11 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 	"github.com/sarveshkapre/endpoint-perf-agent/internal/collector"
 )
 
 func TestEngine_EmitsAlert(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestEngine_EmitsAlert(t *testing.T) {
 }
 
 func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute, nil)
+	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
 func TestEngine_PerMetricCooldownOverride(t *testing.T) {
 	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute, map[string]time.Duration{
 		"cpu_percent": 0,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestEngine_PerMetricCooldownOverride(t *testing.T) {
 }
 
 func TestNewEngine_RejectsUnknownSeverity(t *testing.T) {
-	_, err := NewEngine(5, 3.0, nil, "nope", 0, nil)
+	_, err := NewEngine(5, 3.0, nil, "nope", 0, nil, nil)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -137,6 +138,15 @@ func TestNewEngine_RejectsUnknownSeverity(t *testing.T) {
 func TestNewEngine_RejectsNegativeCooldownOverride(t *testing.T) {
 	_, err := NewEngine(5, 3.0, nil, "low", 0, map[string]time.Duration{
 		"cpu_percent": -1 * time.Second,
+	}, nil)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestNewEngine_RejectsInvalidPercentileRule(t *testing.T) {
+	_, err := NewEngine(5, 3.0, nil, "low", 0, nil, map[string]anomaly.PercentileRule{
+		"cpu_percent": {Percentile: 0, Multiplier: 1.2},
 	})
 	if err == nil {
 		t.Fatalf("expected error")
@@ -144,7 +154,7 @@ func TestNewEngine_RejectsNegativeCooldownOverride(t *testing.T) {
 }
 
 func TestEngine_RespectsMetricFamilies(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -174,7 +184,7 @@ func TestEngine_RespectsMetricFamilies(t *testing.T) {
 }
 
 func TestEngine_EmitsStaticThresholdAlert(t *testing.T) {
-	engine, err := NewEngine(5, 10.0, map[string]float64{"cpu_percent": 50}, "low", 0, nil)
+	engine, err := NewEngine(5, 10.0, map[string]float64{"cpu_percent": 50}, "low", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -198,5 +208,33 @@ func TestEngine_EmitsStaticThresholdAlert(t *testing.T) {
 	}
 	if alerts[0].Threshold != 50 {
 		t.Fatalf("expected threshold 50, got %v", alerts[0].Threshold)
+	}
+}
+
+func TestEngine_EmitsPercentileThresholdAlert(t *testing.T) {
+	engine, err := NewEngine(5, 100.0, nil, "low", 0, nil, map[string]anomaly.PercentileRule{
+		"cpu_percent": {Percentile: 95, Multiplier: 1.2},
+	})
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	base := time.Date(2026, 2, 9, 0, 0, 0, 0, time.UTC)
+	values := []float64{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 60}
+	var got bool
+	for i, v := range values {
+		s := collector.MetricSample{
+			Timestamp:      base.Add(time.Duration(i) * time.Second),
+			CPUPercent:     v,
+			MemUsedPercent: 20,
+		}
+		for _, a := range engine.Observe(s) {
+			if a.Metric == "cpu_percent" && a.RuleType == anomaly.RuleTypePercentile {
+				got = true
+			}
+		}
+	}
+	if !got {
+		t.Fatalf("expected percentile-threshold alert")
 	}
 }

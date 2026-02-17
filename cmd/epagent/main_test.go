@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sarveshkapre/endpoint-perf-agent/internal/anomaly"
 )
 
 func writeSamplesJSONL(t *testing.T) string {
@@ -68,6 +70,13 @@ func TestAnalyze_RejectsUnknownRedactMode(t *testing.T) {
 func TestAnalyze_RejectsUnknownStaticThresholdMetric(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runAnalyze([]string{"--in", in, "--static-threshold", "nope=1"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestAnalyze_RejectsInvalidPercentileThreshold(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runAnalyze([]string{"--in", in, "--percentile-threshold", "cpu=0,1.2"}); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -149,6 +158,13 @@ func TestReport_AcceptsStaticThreshold(t *testing.T) {
 	}
 }
 
+func TestReport_AcceptsPercentileThreshold(t *testing.T) {
+	in := writeSamplesJSONL(t)
+	if err := runReport([]string{"--in", in, "--out", "-", "--percentile-threshold", "cpu=95,1.1"}); err != nil {
+		t.Fatalf("runReport: %v", err)
+	}
+}
+
 func TestReport_LastCannotCombineUntil(t *testing.T) {
 	in := writeSamplesJSONL(t)
 	if err := runReport([]string{"--in", in, "--out", "-", "--last", "1s", "--until", "2026-02-09T00:00:02Z"}); err == nil {
@@ -194,6 +210,12 @@ func TestWatch_RejectsNegativeJitter(t *testing.T) {
 
 func TestWatch_RejectsUnknownMetricCooldownMetric(t *testing.T) {
 	if err := runWatch([]string{"--duration", "1s", "--metric-cooldown", "nope=1s"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestWatch_RejectsInvalidPercentileThreshold(t *testing.T) {
+	if err := runWatch([]string{"--duration", "1s", "--percentile-threshold", "cpu=95"}); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -246,6 +268,28 @@ func TestMetricCooldownsFlag_ParseAndMerge(t *testing.T) {
 	merged := mergeCooldownOverrides(map[string]time.Duration{"mem_used_percent": 3 * time.Second}, f.m)
 	if merged["mem_used_percent"] != 3*time.Second || merged["cpu_percent"] != 5*time.Second {
 		t.Fatalf("unexpected merged cooldowns: %+v", merged)
+	}
+}
+
+func TestPercentileThresholdsFlag_ParseAndMerge(t *testing.T) {
+	var f percentileThresholdsFlag
+	if err := f.Set("cpu=95,1.2"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := f.Set("disk_read=99,1.5"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := f.m["cpu_percent"]; got.Percentile != 95 || got.Multiplier != 1.2 {
+		t.Fatalf("unexpected cpu percentile rule: %+v", got)
+	}
+	merged := mergePercentileRules(map[string]anomaly.PercentileRule{
+		"mem_used_percent": {Percentile: 95, Multiplier: 1.1},
+	}, f.m)
+	if _, ok := merged["cpu_percent"]; !ok {
+		t.Fatalf("expected cpu percentile rule in merge: %+v", merged)
+	}
+	if _, ok := merged["mem_used_percent"]; !ok {
+		t.Fatalf("expected mem percentile rule in merge: %+v", merged)
 	}
 }
 

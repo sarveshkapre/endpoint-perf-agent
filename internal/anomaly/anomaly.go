@@ -90,6 +90,16 @@ func (d *Detector) Check(name string, value float64) *Anomaly {
 	return anomaly
 }
 
+func (d *Detector) History(name string) []float64 {
+	history := d.history[name]
+	if len(history) == 0 {
+		return nil
+	}
+	out := make([]float64, len(history))
+	copy(out, history)
+	return out
+}
+
 func severityFromZ(z float64) string {
 	abs := math.Abs(z)
 	switch {

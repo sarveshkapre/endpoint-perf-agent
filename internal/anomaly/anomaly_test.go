@@ -100,3 +100,19 @@ func TestValidatePercentileRuleRejectsInvalidValues(t *testing.T) {
 		t.Fatalf("expected multiplier validation error")
 	}
 }
+
+func TestDetectorHistoryReturnsCopy(t *testing.T) {
+	d := NewDetector(5, 3)
+	_ = d.Check("cpu_percent", 10)
+	_ = d.Check("cpu_percent", 11)
+
+	h := d.History("cpu_percent")
+	if len(h) != 2 {
+		t.Fatalf("expected history length 2, got %d", len(h))
+	}
+	h[0] = 999
+	h2 := d.History("cpu_percent")
+	if h2[0] == 999 {
+		t.Fatalf("expected copy, got shared history slice")
+	}
+}
