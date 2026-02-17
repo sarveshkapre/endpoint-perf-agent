@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeSamplesJSONL(t *testing.T) string {
@@ -212,5 +213,23 @@ func TestKVLabelsFlag_ParseAndMerge(t *testing.T) {
 	merged := mergeLabels(map[string]string{"region": "us-east-1"}, f.m)
 	if merged["region"] != "us-east-1" || merged["env"] != "test" || merged["service"] != "api" {
 		t.Fatalf("unexpected merged labels: %+v", merged)
+	}
+}
+
+func TestNextIntervalWithJitter_NoJitter(t *testing.T) {
+	base := 2 * time.Second
+	if got := nextIntervalWithJitter(base, 0); got != base {
+		t.Fatalf("expected %s, got %s", base, got)
+	}
+}
+
+func TestNextIntervalWithJitter_Range(t *testing.T) {
+	base := 2 * time.Second
+	jitter := 500 * time.Millisecond
+	for i := 0; i < 100; i++ {
+		got := nextIntervalWithJitter(base, jitter)
+		if got < base || got > base+jitter {
+			t.Fatalf("expected duration in [%s, %s], got %s", base, base+jitter, got)
+		}
 	}
 }

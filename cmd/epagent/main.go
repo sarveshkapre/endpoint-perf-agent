@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -98,6 +99,7 @@ func runCollect(args []string) error {
 	fs.SetOutput(os.Stderr)
 	_ = fs.String("config", cfgPath, "Path to config file (JSON)")
 	interval := fs.Duration("interval", cfg.Interval, "Sampling interval (e.g. 2s)")
+	jitter := fs.Duration("jitter", cfg.SamplingJitter, "Max additional random delay added per interval (e.g. 500ms)")
 	duration := fs.Duration("duration", cfg.Duration, "Total run duration (0 = until interrupted)")
 	once := fs.Bool("once", false, "Collect a single sample and exit")
 	out := fs.String("out", cfg.OutputPath, "Output path for JSONL")
@@ -112,6 +114,7 @@ func runCollect(args []string) error {
 	}
 
 	cfg.Interval = *interval
+	cfg.SamplingJitter = *jitter
 	cfg.Duration = *duration
 	cfg.OutputPath = *out
 	cfg.ProcessAttribution = *processAttribution
@@ -137,6 +140,9 @@ func runCollect(args []string) error {
 	}
 	if cfg.Duration < 0 {
 		return errors.New("duration must be greater than or equal to zero")
+	}
+	if cfg.SamplingJitter < 0 {
+		return errors.New("jitter must be greater than or equal to zero")
 	}
 
 	if cfg.OutputPath == "" {
@@ -165,9 +171,6 @@ func runCollect(args []string) error {
 		return writer.Write(sample)
 	}
 
-	ticker := time.NewTicker(cfg.Interval)
-	defer ticker.Stop()
-
 	deadline := time.Time{}
 	if cfg.Duration > 0 {
 		deadline = time.Now().Add(cfg.Duration)
@@ -186,10 +189,15 @@ func runCollect(args []string) error {
 			return err
 		}
 
+		waitFor := nextIntervalWithJitter(cfg.Interval, cfg.SamplingJitter)
+		timer := time.NewTimer(waitFor)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return nil
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -757,6 +765,16 @@ func findFlagStringValue(args []string, name string) string {
 		}
 	}
 	return ""
+}
+
+func nextIntervalWithJitter(interval, jitter time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	if jitter <= 0 {
+		return interval
+	}
+	return interval + time.Duration(rand.Int63n(int64(jitter)+1))
 }
 
 func parseRFC3339TimeFlag(name, value string) (time.Time, error) {

@@ -34,6 +34,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 type Config struct {
 	Interval           time.Duration      `json:"-"`
+	SamplingJitter     time.Duration      `json:"-"`
 	Duration           time.Duration      `json:"-"`
 	WindowSize         int                `json:"window_size"`
 	ZScoreThreshold    float64            `json:"zscore_threshold"`
@@ -47,6 +48,7 @@ type Config struct {
 
 type fileConfig struct {
 	Interval           Duration           `json:"interval"`
+	SamplingJitter     Duration           `json:"sampling_jitter"`
 	Duration           Duration           `json:"duration"`
 	WindowSize         int                `json:"window_size"`
 	ZScoreThreshold    float64            `json:"zscore_threshold"`
@@ -68,6 +70,7 @@ type MetricFamilies struct {
 func Default() Config {
 	return Config{
 		Interval:           5 * time.Second,
+		SamplingJitter:     0,
 		Duration:           0,
 		WindowSize:         30,
 		ZScoreThreshold:    3.0,
@@ -99,6 +102,9 @@ func Load(path string) (Config, error) {
 	}
 	if fc.Interval.Duration != 0 {
 		cfg.Interval = fc.Interval.Duration
+	}
+	if fc.SamplingJitter.Duration != 0 {
+		cfg.SamplingJitter = fc.SamplingJitter.Duration
 	}
 	if fc.Duration.Duration != 0 {
 		cfg.Duration = fc.Duration.Duration

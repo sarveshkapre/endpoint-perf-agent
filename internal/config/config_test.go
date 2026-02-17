@@ -116,3 +116,20 @@ func TestLoadRespectsStaticThresholds(t *testing.T) {
 		t.Fatalf("expected net_tx_bytes_per_sec threshold 4096, got %+v", cfg.StaticThresholds)
 	}
 }
+
+func TestLoadRespectsSamplingJitter(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfg.json")
+	payload := `{"sampling_jitter":"750ms"}`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.SamplingJitter.String(), "750ms"; got != want {
+		t.Fatalf("expected sampling jitter %q, got %q", want, got)
+	}
+}
