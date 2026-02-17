@@ -16,13 +16,14 @@ type Engine struct {
 	staticThresholds map[string]float64
 	minRank          int
 	cooldown         time.Duration
+	cooldownByMetric map[string]time.Duration
 	lastSent         map[string]time.Time
 	prev             *collector.MetricSample
 	window           int
 	threshold        float64
 }
 
-func NewEngine(windowSize int, threshold float64, staticThresholds map[string]float64, minSeverity string, cooldown time.Duration) (*Engine, error) {
+func NewEngine(windowSize int, threshold float64, staticThresholds map[string]float64, minSeverity string, cooldown time.Duration, cooldownByMetric map[string]time.Duration) (*Engine, error) {
 	windowSize, threshold = report.NormalizeParams(windowSize, threshold)
 
 	if minSeverity == "" {
@@ -36,12 +37,18 @@ func NewEngine(windowSize int, threshold float64, staticThresholds map[string]fl
 	if cooldown < 0 {
 		return nil, fmt.Errorf("cooldown must be greater than or equal to zero")
 	}
+	for metric, d := range cooldownByMetric {
+		if d < 0 {
+			return nil, fmt.Errorf("cooldown override for %s must be greater than or equal to zero", metric)
+		}
+	}
 
 	return &Engine{
 		detector:         anomaly.NewDetector(windowSize, threshold),
 		staticThresholds: cloneThresholds(staticThresholds),
 		minRank:          minRank,
 		cooldown:         cooldown,
+		cooldownByMetric: cloneCooldowns(cooldownByMetric),
 		lastSent:         make(map[string]time.Time),
 		window:           windowSize,
 		threshold:        threshold,
@@ -120,8 +127,9 @@ func (e *Engine) Observe(sample collector.MetricSample) []alert.Alert {
 		if !ok || rank < e.minRank {
 			continue
 		}
-		if e.cooldown > 0 {
-			if last, ok := e.lastSent[name]; ok && sample.Timestamp.Sub(last) < e.cooldown {
+		cooldown := e.cooldownForMetric(name)
+		if cooldown > 0 {
+			if last, ok := e.lastSent[name]; ok && sample.Timestamp.Sub(last) < cooldown {
 				continue
 			}
 			e.lastSent[name] = sample.Timestamp
@@ -176,4 +184,28 @@ func cloneThresholds(in map[string]float64) map[string]float64 {
 		out[k] = v
 	}
 	return out
+}
+
+func cloneCooldowns(in map[string]time.Duration) map[string]time.Duration {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Duration, len(in))
+	for k, v := range in {
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (e *Engine) cooldownForMetric(metric string) time.Duration {
+	if d, ok := e.cooldownByMetric[metric]; ok {
+		return d
+	}
+	return e.cooldown
 }

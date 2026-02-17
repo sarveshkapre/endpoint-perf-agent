@@ -476,7 +476,7 @@ func runWatch(args []string) error {
 
 	sampler := collector.NewSampler(cfg.HostID, cfg.Labels, cfg.ProcessAttribution, toCollectorMetrics(cfg.Metrics))
 
-	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown)
+	engine, err := watch.NewEngine(cfg.WindowSize, cfg.ZScoreThreshold, mergedStaticThresholds, *minSeverity, *cooldown, nil)
 	if err != nil {
 		return err
 	}

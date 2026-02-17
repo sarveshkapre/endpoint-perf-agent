@@ -8,7 +8,7 @@ import (
 )
 
 func TestEngine_EmitsAlert(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", 0)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestEngine_EmitsAlert(t *testing.T) {
 }
 
 func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute)
+	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -91,15 +91,60 @@ func TestEngine_CooldownSuppressesDuplicates(t *testing.T) {
 	}
 }
 
+func TestEngine_PerMetricCooldownOverride(t *testing.T) {
+	engine, err := NewEngine(5, 3.0, nil, "low", time.Minute, map[string]time.Duration{
+		"cpu_percent": 0,
+	})
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	base := time.Date(2026, 2, 9, 0, 0, 0, 0, time.UTC)
+	values := []float64{10, 11, 9, 10, 12, 50, 80}
+
+	cpuAlerts := 0
+	for i, v := range values {
+		s := collector.MetricSample{
+			Timestamp:       base.Add(time.Duration(i) * 10 * time.Second),
+			CPUPercent:      v,
+			MemUsedPercent:  20,
+			DiskUsedPercent: 30,
+			DiskReadBytes:   uint64(i * 100),
+			DiskWriteBytes:  uint64(i * 200),
+			NetRxBytes:      uint64(i * 300),
+			NetTxBytes:      uint64(i * 400),
+		}
+
+		for _, a := range engine.Observe(s) {
+			if a.Metric == "cpu_percent" {
+				cpuAlerts++
+			}
+		}
+	}
+
+	if cpuAlerts != 2 {
+		t.Fatalf("expected 2 cpu_percent alerts with cooldown override, got %d", cpuAlerts)
+	}
+}
+
 func TestNewEngine_RejectsUnknownSeverity(t *testing.T) {
-	_, err := NewEngine(5, 3.0, nil, "nope", 0)
+	_, err := NewEngine(5, 3.0, nil, "nope", 0, nil)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestNewEngine_RejectsNegativeCooldownOverride(t *testing.T) {
+	_, err := NewEngine(5, 3.0, nil, "low", 0, map[string]time.Duration{
+		"cpu_percent": -1 * time.Second,
+	})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
 }
 
 func TestEngine_RespectsMetricFamilies(t *testing.T) {
-	engine, err := NewEngine(5, 3.0, nil, "low", 0)
+	engine, err := NewEngine(5, 3.0, nil, "low", 0, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -129,7 +174,7 @@ func TestEngine_RespectsMetricFamilies(t *testing.T) {
 }
 
 func TestEngine_EmitsStaticThresholdAlert(t *testing.T) {
-	engine, err := NewEngine(5, 10.0, map[string]float64{"cpu_percent": 50}, "low", 0)
+	engine, err := NewEngine(5, 10.0, map[string]float64{"cpu_percent": 50}, "low", 0, nil)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
